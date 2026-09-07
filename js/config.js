@@ -20,7 +20,7 @@ window.A3D_CONFIG = {
   //    (looks like "https://formspree.io/f/abcdwxyz").
   // 3. Paste it below.
   // File uploads (STL/OBJ/3MF/images) are supported on Formspree's free plan.
-  formspreeEndpoint: "", // e.g. "https://formspree.io/f/abcdwxyz"
+  formspreeEndpoint: "https://formspree.io/f/xqpkyynq",
 
   // Optional — shown in the Contact section. Leave blank to hide a line.
   address: "Curaçao",
