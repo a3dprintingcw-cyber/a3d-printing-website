@@ -589,3 +589,11 @@ body.mode-switching [data-content-for] { animation: mode-in .38s cubic-bezier(.2
   .hero-stats { gap: 22px; }
   .hero-stat b { font-size: 19px; }
 }
+
+/* The header nav gained Scanning, Prices and Book, so the full row no longer
+   fits beside the mode switch on narrow laptops. Switch to the hamburger
+   earlier rather than letting the header overflow. */
+@media (max-width: 1080px) {
+  .main-nav { display: none; }
+  .nav-toggle { display: flex; }
+}
