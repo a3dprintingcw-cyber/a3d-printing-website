@@ -62,8 +62,52 @@
     applyMode(saved === "dev" ? "dev" : "print");
   }
   function setMode(mode) {
+    // Re-trigger the swap animation on each switch (not on first paint).
+    body.classList.remove("mode-switching");
+    void body.offsetWidth; // force reflow so the animation restarts
+    body.classList.add("mode-switching");
+    window.setTimeout(function () { body.classList.remove("mode-switching"); }, 500);
+
     applyMode(mode);
     try { localStorage.setItem(MODE_KEY, mode); } catch (e) {}
+  }
+
+  // Keep the mobile browser chrome in step with the active palette.
+  function syncThemeColor() {
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) return;
+    var accent = getComputedStyle(body).getPropertyValue("--blue").trim();
+    if (accent) meta.setAttribute("content", accent);
+  }
+
+  /* ---------------- Reveal sections on scroll ---------------- */
+  function initReveal() {
+    var targets = document.querySelectorAll(
+      ".section-head, .card, .step, .portfolio-card, .form-card, .about-grid > *, .table-wrap, .cta-banner .container"
+    );
+    if (!targets.length) return;
+
+    if (!("IntersectionObserver" in window)) {
+      targets.forEach(function (el) { el.classList.add("reveal", "is-visible"); });
+      return;
+    }
+
+    targets.forEach(function (el) { el.classList.add("reveal"); });
+
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        var el = entry.target;
+        // Stagger siblings so a grid rolls in rather than popping at once.
+        var siblings = el.parentNode ? Array.prototype.slice.call(el.parentNode.children) : [];
+        var index = siblings.indexOf(el);
+        el.style.setProperty("--reveal-delay", Math.min(index, 5) * 70 + "ms");
+        el.classList.add("is-visible");
+        observer.unobserve(el);
+      });
+    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
+
+    targets.forEach(function (el) { observer.observe(el); });
   }
 
   /* ---------------- Mobile nav ---------------- */
@@ -255,12 +299,14 @@
     initForm("quote-form-print");
     initForm("quote-form-dev");
     initQuickQuoteSync();
+    initReveal();
+    syncThemeColor();
 
     var themeToggle = document.getElementById("theme-toggle");
-    if (themeToggle) themeToggle.addEventListener("click", function(){ toggleTheme(); applyMode(body.getAttribute('data-mode')); });
+    if (themeToggle) themeToggle.addEventListener("click", function(){ toggleTheme(); applyMode(body.getAttribute('data-mode')); syncThemeColor(); });
 
     document.querySelectorAll(".mode-switch button").forEach(function (btn) {
-      btn.addEventListener("click", function () { setMode(btn.getAttribute("data-mode")); });
+      btn.addEventListener("click", function () { setMode(btn.getAttribute("data-mode")); syncThemeColor(); });
     });
 
     var navToggle = document.getElementById("nav-toggle");
