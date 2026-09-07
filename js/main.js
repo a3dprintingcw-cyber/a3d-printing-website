@@ -5,24 +5,22 @@
   var root = document.documentElement;
   var body = document.body;
 
-  /* ---------------- Theme (light/dark) ---------------- */
-  var THEME_KEY = "a3d-theme";
+  /* ---------------- Theme follows the mode ----------------
+     There is no manual light/dark toggle: the 3D Printing side runs
+     dark, the Web & App Dev side runs light, and the mode switch
+     drives both together. */
+  var MODE_THEME = { print: "dark", dev: "light" };
+
+  function themeForMode(mode) {
+    return MODE_THEME[mode] || "dark";
+  }
   function applyTheme(theme) {
     root.setAttribute("data-theme", theme);
-    var toggle = document.getElementById("theme-toggle");
-    if (toggle) toggle.setAttribute("aria-pressed", theme === "dark");
   }
   function initTheme() {
     var saved = null;
-    try { saved = localStorage.getItem(THEME_KEY); } catch (e) {}
-    var theme = saved || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-    applyTheme(theme);
-  }
-  function toggleTheme() {
-    var current = root.getAttribute("data-theme") === "dark" ? "dark" : "light";
-    var next = current === "dark" ? "light" : "dark";
-    applyTheme(next);
-    try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+    try { saved = localStorage.getItem(MODE_KEY); } catch (e) {}
+    applyTheme(themeForMode(saved === "dev" ? "dev" : "print"));
   }
 
   /* ---------------- Mode switch (3D Printing / Web & App Dev) ---------------- */
@@ -45,6 +43,7 @@
 
   function applyMode(mode) {
     body.setAttribute("data-mode", mode);
+    applyTheme(themeForMode(mode));
     document.querySelectorAll(".mode-switch button").forEach(function (btn) {
       btn.setAttribute("aria-pressed", btn.getAttribute("data-mode") === mode);
     });
@@ -138,6 +137,22 @@
     document.querySelectorAll("[data-cfg-whatsapp-display]").forEach(function (el) {
       el.textContent = cfg.whatsappNumber ? "+" + cfg.whatsappNumber : "Add your number in js/config.js";
     });
+
+    // Booking section only exists if there's somewhere to book.
+    var booking = document.getElementById("book");
+    if (booking) {
+      if (cfg.bookingUrl) {
+        booking.style.display = "";
+        document.querySelectorAll(".js-booking-frame").forEach(function (f) {
+          if (!f.getAttribute("src")) f.setAttribute("src", cfg.bookingUrl);
+        });
+        document.querySelectorAll(".js-booking-link").forEach(function (a) { a.href = cfg.bookingUrl; });
+        document.querySelectorAll(".js-booking-nav").forEach(function (a) { a.style.display = ""; });
+      } else {
+        booking.style.display = "none";
+        document.querySelectorAll(".js-booking-nav").forEach(function (a) { a.style.display = "none"; });
+      }
+    }
 
     var needsSetup = !cfg.whatsappNumber || !cfg.formspreeEndpoint;
     document.querySelectorAll(".setup-banner").forEach(function (el) {
@@ -301,9 +316,6 @@
     initQuickQuoteSync();
     initReveal();
     syncThemeColor();
-
-    var themeToggle = document.getElementById("theme-toggle");
-    if (themeToggle) themeToggle.addEventListener("click", function(){ toggleTheme(); applyMode(body.getAttribute('data-mode')); syncThemeColor(); });
 
     document.querySelectorAll(".mode-switch button").forEach(function (btn) {
       btn.addEventListener("click", function () { setMode(btn.getAttribute("data-mode")); syncThemeColor(); });

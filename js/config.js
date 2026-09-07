@@ -22,6 +22,12 @@ window.A3D_CONFIG = {
   // File uploads (STL/OBJ/3MF/images) are supported on Formspree's free plan.
   formspreeEndpoint: "https://formspree.io/f/xqpkyynq",
 
+  // Booking page for the "Book a meeting" section. Leave blank and the
+  // whole section stays hidden. Use a Google Calendar appointment schedule
+  // (Calendar → Create → Appointment schedule) set to require your
+  // confirmation, or a Cal.com / Calendly link — paste the booking URL here.
+  bookingUrl: "", // e.g. "https://calendar.app.google/xxxxxxxx"
+
   // Optional — shown in the Contact section. Leave blank to hide a line.
   address: "Curaçao",
   hours: "Mon–Fri 9:00–17:00 AST",
