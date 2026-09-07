@@ -24,8 +24,10 @@
       <a href="#services">Services</a>
       <a href="#how-it-works">How it works</a>
       <a href="#work">Work</a>
+      <a href="prices.html" data-content-for="print">Prices</a>
       <a href="#quote" data-content-for="print">Get a quote</a>
       <a href="#quote" data-content-for="dev">Start a project</a>
+      <a href="#book" class="js-booking-nav" style="display:none">Book</a>
       <a href="#about">About</a>
       <a href="#contact">Contact</a>
     </nav>
@@ -43,10 +45,6 @@
         </button>
       </div>
 
-      <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">
-        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2M12 19.5v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2.5 12h2M19.5 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
-        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z"/></svg>
-      </button>
 
       <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Open menu">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
@@ -59,7 +57,9 @@
   <a href="#services">Services</a>
   <a href="#how-it-works">How it works</a>
   <a href="#work">Work</a>
+  <a href="prices.html">Prices</a>
   <a href="#quote">Get a quote</a>
+  <a href="#book" class="js-booking-nav" style="display:none">Book</a>
   <a href="#about">About</a>
   <a href="#contact">Contact</a>
 </nav>
@@ -76,7 +76,7 @@
         <h1 data-content-for="print">Your idea, printed in 3D — fast.</h1>
         <h1 data-content-for="dev">Websites &amp; apps, built to work for you.</h1>
 
-        <p class="lede" data-content-for="print">Upload a photo or an STL file and get a real quote back quickly. We print prototypes, replacement parts, cosplay props, models and small-batch production — for walk-in customers and businesses alike.</p>
+        <p class="lede" data-content-for="print">Upload a photo, sketch or STL file and get a quote fast. We create custom 3D prints, replacement parts, signs, business products and one-of-a-kind designs — built around exactly what you need.</p>
         <p class="lede" data-content-for="dev">Need a website, a web app, or a mobile app? We design and build clean, fast, maintainable products — from a one-page business site to a full custom application.</p>
 
         <div class="hero-actions">
@@ -88,8 +88,8 @@
 
         <div class="hero-stats" data-content-for="print" data-display="flex">
           <div class="hero-stat"><b>Walk-in</b><span>or order online</span></div>
-          <div class="hero-stat"><b>PLA · PETG · TPU · Resin</b><span>materials on hand</span></div>
-          <div class="hero-stat"><b>EN / PA</b><span>English &amp; Papiamento</span></div>
+          <div class="hero-stat"><b>PLA · PETG · TPU · ASA · Resin</b><span>materials on hand</span></div>
+          <div class="hero-stat"><b>5 languages</b><span>spoken in the shop</span></div>
         </div>
         <div class="hero-stats" data-content-for="dev" data-display="flex">
           <div class="hero-stat"><b>Websites</b><span>marketing &amp; e-commerce</span></div>
@@ -132,7 +132,7 @@
         <span class="eyebrow">Services</span>
         <h2 data-content-for="print">Everything you need, printed right</h2>
         <h2 data-content-for="dev">Software, built around your business</h2>
-        <p data-content-for="print">From a single one-off print to ongoing production runs.</p>
+        <p data-content-for="print">From one-off custom pieces to complete business projects.</p>
         <p data-content-for="dev">From a simple landing page to a full custom application.</p>
       </div>
 
@@ -245,6 +245,7 @@
             <tr><td>PETG</td><td>Functional parts, outdoor use</td><td>Tougher, slightly flexible</td><td>Better heat &amp; impact resistance than PLA</td></tr>
             <tr><td>TPU</td><td>Phone cases, gaskets, grips</td><td>Rubber-like, flexible</td><td>Bendable and durable</td></tr>
             <tr><td>ABS</td><td>Mechanical &amp; automotive parts</td><td>Rigid, heat-resistant</td><td>Good strength for functional components</td></tr>
+            <tr><td>ASA</td><td>Outdoor signs &amp; parts that live in the sun</td><td>Rigid, weather-resistant</td><td>UV-stable — holds colour where PLA and PETG fade</td></tr>
             <tr><td>Resin (SLA)</td><td>Miniatures, jewelry, fine detail</td><td>Smooth, high detail</td><td>Best surface finish, small parts</td></tr>
           </tbody>
         </table>
@@ -424,8 +425,8 @@
             </div>
             <div class="card">
               <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-2a4 4 0 0 1 4-4h3"/><circle cx="9" cy="7" r="3.5"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0-3-3.87"/></svg></div>
-              <h3>English &amp; Papiamento</h3>
-              <p>Happy to talk through your project in whichever you're most comfortable with.</p>
+              <h3>Five languages spoken</h3>
+              <p>Happy to talk through your project in whichever language you're most comfortable with.</p>
             </div>
           </div>
         </div>
@@ -524,13 +525,13 @@
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Jobs run in parallel for a fast turnaround</li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Serving walk-in customers and business clients</li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Quotes in XCG (Antillean guilder)</li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> We speak English and Papiamento</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> We speak five languages</li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Also available for freelance web &amp; app development</li>
         </ul>
       </div>
       <div class="about-visual">
         <div class="mini-stat"><b>Same day</b><span>most quotes</span></div>
-        <div class="mini-stat"><b>2</b><span>languages spoken</span></div>
+        <div class="mini-stat"><b>5</b><span>languages spoken</span></div>
         <div class="mini-stat"><b>XCG</b><span>local pricing</span></div>
         <div class="mini-stat"><b>🇨🇼</b><span>Curaçao-based</span></div>
       </div>
@@ -555,6 +556,29 @@
   </section>
 
   <!-- ================= CONTACT ================= -->
+  <!-- ================= BOOK A MEETING =================
+       Hidden until a bookingUrl is set in js/config.js. Point it at a
+       Google Calendar appointment schedule (or Cal.com / Calendly) that
+       is configured to require your confirmation, so nothing lands in
+       your calendar until you accept it. -->
+  <section class="section" id="book" style="display:none">
+    <div class="container">
+      <div class="section-head center">
+        <span class="eyebrow">Book a meeting</span>
+        <h2 data-content-for="print">Rather talk it through?</h2>
+        <h2 data-content-for="dev">Book a project chat</h2>
+        <p>Pick a slot that suits you and send a request. Every booking comes to me first — you'll get a confirmation once I've accepted it.</p>
+      </div>
+      <div class="booking-embed">
+        <iframe class="js-booking-frame" title="Book a meeting" loading="lazy" frameborder="0"></iframe>
+      </div>
+      <p class="booking-fallback">
+        Trouble with the calendar above?
+        <a class="js-booking-link" href="#" target="_blank" rel="noopener">Open the booking page in a new tab</a>.
+      </p>
+    </div>
+  </section>
+
   <section class="section section-alt" id="contact">
     <div class="container">
       <div class="section-head center">
@@ -594,6 +618,7 @@
       <ul class="footer-links">
         <li><a href="#services">Services</a></li>
         <li><a href="#work">Work</a></li>
+        <li><a href="prices.html">Prices</a></li>
         <li><a href="#quote">Quote</a></li>
         <li><a href="#about">About</a></li>
         <li><a href="#contact">Contact</a></li>
