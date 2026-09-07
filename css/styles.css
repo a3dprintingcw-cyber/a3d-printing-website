@@ -559,3 +559,33 @@ body.mode-switching [data-content-for] { animation: mode-in .38s cubic-bezier(.2
 
 /* CTA banner picks up the secondary accent too. */
 .cta-banner { background: linear-gradient(135deg, var(--blue-dark), var(--blue) 55%, color-mix(in srgb, var(--accent-2) 60%, var(--blue))); }
+
+/* ---------- booking embed ---------- */
+.booking-embed {
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--card); overflow: hidden; box-shadow: var(--shadow);
+}
+.booking-embed iframe { display: block; width: 100%; height: 640px; border: 0; background: var(--card); }
+.booking-fallback { text-align: center; font-size: 14px; color: var(--ink-soft); margin-top: 14px; }
+.booking-fallback a { color: var(--blue); font-weight: 600; }
+@media (max-width: 720px) {
+  .booking-embed iframe { height: 560px; }
+}
+
+/* ---------- prices page ---------- */
+.price-card { display: flex; flex-direction: column; }
+.price-card h3 { margin: 0 0 8px; font-size: 17px; }
+.price-card p { font-size: 14.5px; color: var(--ink-soft); margin: 0 0 18px; }
+.price-card .price { margin-top: auto; font-size: 20px; font-weight: 700; color: var(--blue); }
+.price-card .price span { font-size: 13px; font-weight: 600; color: var(--ink-soft); margin-right: 4px; }
+.price-card .price-tbd { font-size: 14px; font-weight: 600; color: var(--ink-soft); }
+.price-cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-top: 34px; }
+.btn-sm { padding: 9px 16px; font-size: 14px; }
+.main-nav a[aria-current="page"] { color: var(--blue); font-weight: 700; }
+
+/* Hero stats: the materials line got longer (ASA), so tighten the row a
+   little to keep all three on one line on desktop. */
+@media (min-width: 981px) {
+  .hero-stats { gap: 22px; }
+  .hero-stat b { font-size: 19px; }
+}
