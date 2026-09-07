@@ -22,10 +22,11 @@
 
     <nav class="main-nav" aria-label="Primary">
       <a href="#services">Services</a>
-      <a href="#how-it-works">How it works</a>
+      <a href="#scanning" data-content-for="print">Scanning</a>
+      <a href="#how-it-works">Process</a>
       <a href="#work">Work</a>
       <a href="prices.html" data-content-for="print">Prices</a>
-      <a href="#quote" data-content-for="print">Get a quote</a>
+      <a href="#quote" data-content-for="print">Quote</a>
       <a href="#quote" data-content-for="dev">Start a project</a>
       <a href="#book" class="js-booking-nav" style="display:none">Book</a>
       <a href="#about">About</a>
@@ -55,6 +56,7 @@
 
 <nav class="mobile-nav" aria-label="Mobile">
   <a href="#services">Services</a>
+  <a href="#scanning">Scanning</a>
   <a href="#how-it-works">How it works</a>
   <a href="#work">Work</a>
   <a href="prices.html">Prices</a>
@@ -155,12 +157,22 @@
         <div class="card">
           <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/><path d="M9 13h6M9 17h4"/></svg></div>
           <h3>From a photo, no file needed</h3>
-          <p>Don't have an STL? Send a clear photo or sketch of what you need and describe the size — we'll help design or find a match.</p>
+          <p>Don't have an STL? Send a clear photo or sketch and describe the size — or just bring the part in and we'll scan it. We'll help design it or find a match.</p>
         </div>
         <div class="card">
           <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z"/><path d="M12 8v4l3 2"/></svg></div>
           <h3>Repairs &amp; replacement parts</h3>
           <p>Broken bracket, missing knob, snapped clip? We reproduce or redesign small parts for household items and appliances.</p>
+        </div>
+        <div class="card">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M21 16v3a2 2 0 0 1-2 2h-3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M3 12h18"/><circle cx="12" cy="12" r="2.6"/></svg></div>
+          <h3>3D scanning &amp; reverse engineering</h3>
+          <p>Bring us the part and we scan it with a Creality Raptor Pro — accurate to 0.02&nbsp;mm. No drawing, no original file, no manufacturer needed: we turn the real object into a model we can print.</p>
+        </div>
+        <div class="card">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h14"/><path d="M6 17v2"/><path d="M18 17v2"/><path d="M4.5 13.5 6 8.5A2 2 0 0 1 7.9 7h8.2a2 2 0 0 1 1.9 1.5l1.5 5"/><path d="M3.5 13.5h17a1 1 0 0 1 1 1V16a1 1 0 0 1-1 1h-17a1 1 0 0 1-1-1v-1.5a1 1 0 0 1 1-1Z"/><circle cx="7.5" cy="14.8" r=".9" fill="currentColor" stroke="none"/><circle cx="16.5" cy="14.8" r=".9" fill="currentColor" stroke="none"/></svg></div>
+          <h3>Car &amp; automotive parts</h3>
+          <p>Broken trim clips, missing brackets, vents, badge holders, interior pieces — and custom work like spoilers and body parts. We scan the mounting points off your own car so it fits the car you actually have.</p>
         </div>
         <div class="card">
           <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-2a4 4 0 0 1 4-4h3"/><circle cx="9" cy="7" r="3.5"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0-3-3.87"/></svg></div>
@@ -201,6 +213,37 @@
           <p>Bug fixes, small feature requests and maintenance after launch — so the product keeps working as your needs change.</p>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- ================= 3D SCANNING ================= -->
+  <section class="section" id="scanning" data-content-for="print">
+    <div class="container">
+      <div class="section-head center">
+        <span class="eyebrow">3D scanning</span>
+        <h2>If it exists, we can rebuild it</h2>
+        <p>A part snapped and nobody sells it any more? A bracket that never fitted properly in the first place? We scan the real thing with a Creality Raptor Pro handheld scanner — down to 0.02&nbsp;mm — and build a printable model from it. No original file, no technical drawing, no manufacturer required.</p>
+      </div>
+
+      <div class="grid grid-3">
+        <div class="card">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M21 16v3a2 2 0 0 1-2 2h-3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M3 12h18"/><circle cx="12" cy="12" r="2.6"/></svg></div>
+          <h3>Scan</h3>
+          <p>Bring the part to us — or, for anything bolted to a car or a machine, we come to it. Colour and geometry both get captured, so even worn and irregular shapes come through.</p>
+        </div>
+        <div class="card">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4"/><path d="M12 17v4"/><path d="M3 12h4"/><path d="M17 12h4"/><rect x="7.5" y="7.5" width="9" height="9" rx="2"/></svg></div>
+          <h3>Rebuild</h3>
+          <p>The scan becomes a clean, solid model. Broken, missing or worn-away sections get reconstructed from what's left and from the symmetry of the part.</p>
+        </div>
+        <div class="card">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 2.6 5.6 6.1.8-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6L3.3 8.4l6.1-.8L12 2Z"/></svg></div>
+          <h3>Improve</h3>
+          <p>Since we now have the model, the copy doesn't have to be identical. Thicker where it snapped, reinforced where it flexed, or reshaped to do the job better — then printed in a material that suits the use.</p>
+        </div>
+      </div>
+
+      <p class="portfolio-note">Common jobs: discontinued replacement parts, one-off brackets and mounts, restoring damaged pieces, and automotive work — trim, vents, badge holders, spoilers and custom body parts fitted to your own car.</p>
     </div>
   </section>
 
@@ -369,6 +412,7 @@
                     <option>PETG</option>
                     <option>TPU (flexible)</option>
                     <option>ABS</option>
+                    <option>ASA (outdoor / UV-stable)</option>
                     <option>Resin (SLA)</option>
                   </select>
                 </div>
