@@ -403,3 +403,159 @@ td:first-child { color: var(--ink); font-weight: 600; }
   background: var(--paper); flex-direction: column; padding: 24px; gap: 6px; overflow-y: auto;
 }
 .mobile-nav a { display: block; padding: 14px 6px; text-decoration: none; font-weight: 700; font-size: 17px; color: var(--ink); border-bottom: 1px solid var(--border); }
+
+/* ==========================================================================
+   Mode-aware palette + motion
+   --------------------------------------------------------------------------
+   The 3D-printing side keeps the original blue. The Web & App Dev side
+   swaps the accent to violet with a cyan secondary. Everything downstream
+   already paints from --blue / --blue-dark / --blue-light, so overriding
+   those three (plus --accent-2) on body[data-mode="dev"] re-skins the whole
+   page. data-mode lives on <body>, data-theme on <html>, hence the
+   descendant selectors for the dark-theme variants.
+   ========================================================================== */
+
+:root {
+  --accent-2: #4d84ff;              /* secondary accent, print mode */
+  --glow: rgba(30, 95, 214, .38);
+  --mode-fade: .45s;
+}
+[data-theme="dark"] {
+  --accent-2: #83a9ff;
+  --glow: rgba(77, 132, 255, .34);
+}
+
+body[data-mode="dev"] {
+  --blue: #7c3aed;
+  --blue-dark: #5b21b6;
+  --blue-light: #f1ebfe;
+  --accent-2: #06b6d4;
+  --glow: rgba(124, 58, 237, .38);
+}
+[data-theme="dark"] body[data-mode="dev"] {
+  --blue: #a78bfa;
+  --blue-dark: #c4b5fd;
+  --blue-light: #221a3d;
+  --accent-2: #22d3ee;
+  --glow: rgba(167, 139, 250, .34);
+}
+
+/* Let the palette change be a glide rather than a jump. */
+body,
+.card,
+.hero-visual,
+.btn,
+.mode-switch,
+.portfolio-thumb,
+.form-card,
+.step .num,
+.card .icon {
+  transition:
+    background-color var(--mode-fade) ease,
+    background-image var(--mode-fade) ease,
+    border-color var(--mode-fade) ease,
+    box-shadow var(--mode-fade) ease,
+    color var(--mode-fade) ease,
+    transform .18s ease;
+}
+
+/* Accent-driven shadows so buttons glow in whichever palette is active. */
+.btn-primary {
+  background: linear-gradient(135deg, var(--blue), color-mix(in srgb, var(--accent-2) 55%, var(--blue)));
+  box-shadow: 0 8px 22px -8px var(--glow);
+}
+.btn-primary:hover {
+  background: linear-gradient(135deg, var(--blue-dark), var(--blue));
+  box-shadow: 0 12px 28px -8px var(--glow);
+  transform: translateY(-1px);
+}
+
+/* ---------- hero visual: soft animated aura + faint grid ---------- */
+.hero-visual { isolation: isolate; }
+.hero-visual::before {
+  content: "";
+  position: absolute; inset: -30%;
+  background:
+    radial-gradient(38% 38% at 30% 30%, color-mix(in srgb, var(--blue) 42%, transparent), transparent 70%),
+    radial-gradient(34% 34% at 70% 65%, color-mix(in srgb, var(--accent-2) 38%, transparent), transparent 70%);
+  filter: blur(26px);
+  opacity: .75;
+  z-index: -2;
+  animation: aura-drift 18s ease-in-out infinite alternate;
+}
+.hero-visual::after {
+  content: "";
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--blue) 12%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--blue) 12%, transparent) 1px, transparent 1px);
+  background-size: 26px 26px;
+  mask-image: radial-gradient(70% 70% at 50% 50%, #000, transparent 78%);
+  -webkit-mask-image: radial-gradient(70% 70% at 50% 50%, #000, transparent 78%);
+  opacity: 0;
+  transition: opacity var(--mode-fade) ease;
+  z-index: -1;
+}
+/* the grid is a "software" cue — only in dev mode */
+body[data-mode="dev"] .hero-visual::after { opacity: 1; }
+.hero-visual svg { color: var(--blue); filter: drop-shadow(0 6px 18px var(--glow)); }
+
+@keyframes aura-drift {
+  0%   { transform: translate3d(-3%, -2%, 0) scale(1); }
+  50%  { transform: translate3d(3%, 2%, 0) scale(1.06); }
+  100% { transform: translate3d(-2%, 3%, 0) scale(1.02); }
+}
+
+/* ---------- cards: edge-light on hover ---------- */
+.card { position: relative; overflow: hidden; }
+.card::after {
+  content: "";
+  position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--blue) 14%, transparent), transparent 55%);
+  opacity: 0; transition: opacity .25s ease;
+}
+.card:hover::after { opacity: 1; }
+.card:hover {
+  box-shadow: 0 18px 40px -22px var(--glow), var(--shadow);
+  border-color: color-mix(in srgb, var(--blue) 45%, var(--border));
+}
+
+/* ---------- portfolio thumbs paint from the palette ---------- */
+.portfolio-thumb.grad-a { background: linear-gradient(135deg, var(--blue), color-mix(in srgb, var(--accent-2) 70%, var(--blue))); }
+.portfolio-thumb.grad-b { background: linear-gradient(135deg, var(--blue-dark), var(--blue)); }
+.portfolio-thumb.grad-c { background: linear-gradient(135deg, #14161a, #4a4f58); }
+.portfolio-card:hover .portfolio-thumb svg { transform: scale(1.06); }
+.portfolio-thumb svg { transition: transform .35s cubic-bezier(.2,.7,.3,1); }
+
+/* ---------- mode switch: sliding thumb picks up the active accent ---------- */
+.mode-switch .thumb {
+  background: linear-gradient(135deg, var(--blue), color-mix(in srgb, var(--accent-2) 60%, var(--blue)));
+  transition: transform .38s cubic-bezier(.65,.05,.36,1), background-image var(--mode-fade) ease;
+  box-shadow: 0 4px 14px -4px var(--glow);
+}
+
+/* ---------- content swap: fade + lift instead of a hard cut ---------- */
+@keyframes mode-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+body.mode-switching [data-content-for] { animation: mode-in .38s cubic-bezier(.2,.7,.3,1) both; }
+
+/* ---------- reveal sections on scroll ---------- */
+.reveal { opacity: 0; transform: translateY(18px); }
+.reveal.is-visible {
+  opacity: 1; transform: none;
+  transition: opacity .6s cubic-bezier(.2,.7,.3,1), transform .6s cubic-bezier(.2,.7,.3,1);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+/* Respect people who'd rather not have motion. */
+@media (prefers-reduced-motion: reduce) {
+  .hero-visual::before { animation: none; }
+  .reveal, .reveal.is-visible { opacity: 1; transform: none; transition: none; }
+  body.mode-switching [data-content-for] { animation: none; }
+  * { scroll-behavior: auto; }
+}
+
+/* CTA banner picks up the secondary accent too. */
+.cta-banner { background: linear-gradient(135deg, var(--blue-dark), var(--blue) 55%, color-mix(in srgb, var(--accent-2) 60%, var(--blue))); }
