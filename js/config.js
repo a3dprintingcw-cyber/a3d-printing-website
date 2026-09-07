@@ -9,10 +9,10 @@ window.A3D_CONFIG = {
   // Shown in the contact section and used to build the WhatsApp quick-quote link.
   // Use the full international number, digits only (no +, spaces or dashes).
   // Example for Curaçao: "5999XXXXXXX"
-  whatsappNumber: "", // e.g. "59996001234"
+  whatsappNumber: "59995401708",
 
   // Contact email shown on the site.
-  contactEmail: "info@a3dprinting.cw", // TODO: replace with your real email
+  contactEmail: "a3dprinting.cw@gmail.com",
 
   // Formspree endpoint for the quote/inquiry forms.
   // 1. Go to https://formspree.io and create a free account (takes ~2 min).
