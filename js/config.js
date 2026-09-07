@@ -26,7 +26,7 @@ window.A3D_CONFIG = {
   // whole section stays hidden. Use a Google Calendar appointment schedule
   // (Calendar → Create → Appointment schedule) set to require your
   // confirmation, or a Cal.com / Calendly link — paste the booking URL here.
-  bookingUrl: "", // e.g. "https://calendar.app.google/xxxxxxxx"
+  bookingUrl: "https://calendar.google.com/calendar/appointments/schedules/AcZssZ3ID6LkVo12Y4j4N6zemnbxYWM3ywSgozd4WU9zYmAh8Lis0YYo9CcgbwvG3grtKi0CIhxieJH6?gv=true",
 
   // Optional — shown in the Contact section. Leave blank to hide a line.
   address: "Curaçao",
