@@ -597,3 +597,33 @@ body.mode-switching [data-content-for] { animation: mode-in .38s cubic-bezier(.2
   .main-nav { display: none; }
   .nav-toggle { display: flex; }
 }
+
+/* On phones the mode switch used to show bare icons, which gave no clue that
+   it switches the whole site between the printing and the dev side. Show a
+   shortened label instead of hiding the text entirely. */
+.mode-switch .label-short { display: none; }
+@media (max-width: 720px) {
+  .mode-switch button span.label { display: none; }
+  .mode-switch .label-short { display: inline; }
+  .mode-switch button { padding: 8px 10px; font-size: 12px; gap: 5px; }
+  .mode-switch svg { width: 14px; height: 14px; }
+}
+@media (max-width: 400px) {
+  .mode-switch button { padding: 7px 8px; font-size: 11.5px; }
+  .site-header .container { padding: 0 14px; }
+}
+@media (max-width: 365px) {
+  /* Very narrow phones: keep the words, drop the icons — the label is what
+     tells people the switch changes the whole site. */
+  .mode-switch button svg { display: none; }
+  .mode-switch button { padding: 7px 9px; }
+}
+
+/* Grid children default to min-width:auto, so a long unbroken string (a code
+   snippet, a URL) could push the quote section wider than a small phone
+   screen and give the whole page a horizontal scroll. */
+.split > *, .grid > *, .about-grid > * { min-width: 0; }
+/* The print/dev wrappers use display:contents, so the real grid items are
+   the cards themselves — they need min-width:0 directly. */
+.form-card, .quote-side, .card { min-width: 0; }
+.card, .form-card, .quote-side { overflow-wrap: anywhere; }
