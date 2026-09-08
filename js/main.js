@@ -28,7 +28,7 @@
 
   // Elements toggled by [data-content-for] keep whatever layout display
   // they actually need (grid/flex/inline-flex/inline) rather than always
-  // falling back to "block" — set an explicit data-display="..." attribute
+  // falling back to "block". Set an explicit data-display="..." attribute
   // in the HTML for anything not covered by the defaults below.
   function preferredDisplay(el) {
     if (el.dataset.display) return el.dataset.display;
@@ -241,7 +241,7 @@
 
       if (!endpoint) {
         status.className = "form-status err";
-        status.textContent = "This form isn't connected yet — the owner needs to add a Formspree endpoint in js/config.js. In the meantime, please use the WhatsApp button below.";
+        status.textContent = "This form isn't connected yet. The owner needs to add a Formspree endpoint in js/config.js. In the meantime, please use the WhatsApp button below.";
         return;
       }
 
@@ -260,7 +260,7 @@
         .then(function (res) {
           if (res.ok) {
             status.className = "form-status ok";
-            status.textContent = "Thanks! Your request has been sent — we'll get back to you shortly.";
+            status.textContent = "Thanks! Your request has been sent. We'll get back to you shortly.";
             form.reset();
             var list = form.querySelector('[id$="file-list"]');
             if (list) list.innerHTML = "";

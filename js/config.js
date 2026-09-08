@@ -1,7 +1,7 @@
 /**
- * A3D Printing — site configuration
+ * A3D Printing site configuration
  * ----------------------------------
- * Edit the values below — nothing else in the site needs to change.
+ * Edit the values below. Nothing else in the site needs to change.
  * After editing, commit and push (or just re-run the publish step) and
  * GitHub Pages will update automatically in a minute or two.
  */
@@ -25,10 +25,10 @@ window.A3D_CONFIG = {
   // Booking page for the "Book a meeting" section. Leave blank and the
   // whole section stays hidden. Use a Google Calendar appointment schedule
   // (Calendar → Create → Appointment schedule) set to require your
-  // confirmation, or a Cal.com / Calendly link — paste the booking URL here.
+  // confirmation, or a Cal.com / Calendly link. Paste the booking URL here.
   bookingUrl: "https://calendar.google.com/calendar/appointments/schedules/AcZssZ3ID6LkVo12Y4j4N6zemnbxYWM3ywSgozd4WU9zYmAh8Lis0YYo9CcgbwvG3grtKi0CIhxieJH6?gv=true",
 
-  // Optional — shown in the Contact section. Leave blank to hide a line.
+  // Optional, shown in the Contact section. Leave blank to hide a line.
   address: "Curaçao",
   hours: "Mon–Fri 9:00–17:00 AST",
 
