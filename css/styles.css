@@ -627,3 +627,10 @@ body.mode-switching [data-content-for] { animation: mode-in .38s cubic-bezier(.2
    the cards themselves — they need min-width:0 directly. */
 .form-card, .quote-side, .card { min-width: 0; }
 .card, .form-card, .quote-side { overflow-wrap: anywhere; }
+
+/* Once the desktop nav is hidden the header row is just logo + actions, both
+   flex-shrink:0 sitting at flex-start — which left the mode switch and menu
+   button stranded in the middle of the bar. Push the actions to the right. */
+@media (max-width: 1080px) {
+  .header-actions { margin-left: auto; }
+}
