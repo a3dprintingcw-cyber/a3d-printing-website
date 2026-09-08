@@ -28,6 +28,12 @@ window.A3D_CONFIG = {
   // confirmation, or a Cal.com / Calendly link. Paste the booking URL here.
   bookingUrl: "https://calendar.google.com/calendar/appointments/schedules/AcZssZ3ID6LkVo12Y4j4N6zemnbxYWM3ywSgozd4WU9zYmAh8Lis0YYo9CcgbwvG3grtKi0CIhxieJH6?gv=true",
 
+  // Instagram profile. Paste the full URL here and the Instagram buttons
+  // (header, mobile menu, closing banner, contact and footer) turn on.
+  // Leave both blank and they all stay hidden.
+  instagramUrl: "https://www.instagram.com/a3dprinting_cw/",
+  instagramHandle: "@a3dprinting_cw",
+
   // Optional, shown in the Contact section. Leave blank to hide a line.
   address: "Curaçao",
   hours: "Mon–Fri 9:00–17:00 AST",
