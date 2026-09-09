@@ -797,3 +797,14 @@ body.mode-switching [data-content-for] { animation: mode-in .38s cubic-bezier(.2
 }
 .mobile-nav a.ig-link { display: inline-flex; align-items: center; gap: 8px; }
 .mobile-nav a.ig-link svg { width: 17px; height: 17px; }
+
+/* ---------------- Legal pages (privacy, terms) ---------------- */
+.container.narrow { max-width: 760px; }
+.section-head .sub { font-size: 14px; color: var(--ink-soft); opacity: .8; margin: 0; }
+.legal h3 { margin: 34px 0 10px; font-size: 19px; }
+.legal h3:first-child { margin-top: 0; }
+.legal p { max-width: 68ch; }
+.legal ul { margin: 0 0 1em; padding-left: 20px; color: var(--ink-soft); line-height: 1.65; }
+.legal ul li { margin: 0 0 .4em; }
+.legal a { color: var(--blue); }
+.legal + .price-cta { justify-content: flex-start; margin-top: 44px; }
