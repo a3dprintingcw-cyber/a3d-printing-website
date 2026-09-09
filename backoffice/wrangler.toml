@@ -1,41 +1,37 @@
 # A3D Printing back office
 #
-# Deploy targets two path prefixes on the live domain, so the marketing site
-# stays exactly where it is on GitHub Pages:
+# Everything new lives on app.a3dprinting.com:
 #
-#   a3dprinting.com/api/*    the intake API, webhooks and the analytics beacon
-#   a3dprinting.com/admin*   the back office itself
+#   app.a3dprinting.com/admin   the back office
+#   app.a3dprinting.com/api/*   intake, uploads, webhooks, analytics beacon
 #
-# Both routes need the a3dprinting.com DNS record to be proxied through
-# Cloudflare (orange cloud), otherwise the Worker never sees the request.
+# The marketing site stays on GitHub Pages with its DNS untouched.
 
 name = "a3d-backoffice"
 main = "src/index.js"
 compatibility_date = "2026-09-01"
 workers_dev = false
 
+# The Worker lives on its own subdomain so the marketing site's DNS never
+# has to change: app.a3dprinting.com serves /admin and /api.
 routes = [
-  { pattern = "a3dprinting.com/api/*", zone_name = "a3dprinting.com" },
-  { pattern = "a3dprinting.com/admin", zone_name = "a3dprinting.com" },
-  { pattern = "a3dprinting.com/admin/*", zone_name = "a3dprinting.com" },
+  { pattern = "app.a3dprinting.com", custom_domain = true },
 ]
+
+# Sentoo warns that webhooks can be late, duplicated or missing, so we also
+# poll the payments we are waiting on.
+[triggers]
+crons = ["*/5 * * * *"]
 
 [[d1_databases]]
 binding = "DB"
 database_name = "a3d"
-database_id = "REPLACE_AFTER_CREATING_THE_DATABASE"
+database_id = "8c3370c7-0de0-4d53-9674-0b675de925ad"
 migrations_dir = "migrations"
 
 [[r2_buckets]]
 binding = "FILES"
 bucket_name = "a3d-uploads"
-
-# Alerts to Adrian. Needs Email Routing on the zone and the destination
-# address verified once. Without it the Worker still records the order and
-# simply skips the email.
-[[send_email]]
-name = "ALERTS"
-destination_address = "a3dprinting.cw@gmail.com"
 
 [vars]
 ADMIN_EMAIL = "a3dprinting.cw@gmail.com"
@@ -44,8 +40,8 @@ CURRENCY = "XCG"
 PUBLIC_ORIGIN = "https://a3dprinting.com"
 MAX_UPLOAD_MB = "50"
 # Cloudflare Access team domain, e.g. "a3dprinting" for a3dprinting.cloudflareaccess.com
-CF_ACCESS_TEAM = "REPLACE_WITH_TEAM_NAME"
-CF_ACCESS_AUD = "REPLACE_WITH_APPLICATION_AUD"
+CF_ACCESS_TEAM = "a3dprinting"
+CF_ACCESS_AUD = "cb630e81ffe72821523d4d21aa30806b056d68cc2c3feee4865ffedb7cf314ca"
 # sandbox until Sentoo issues production credentials
 SENTOO_BASE = "https://api.sandbox.sentoo.io"
 SENTOO_MODE = "mock"
@@ -56,4 +52,6 @@ SENTOO_MODE = "mock"
 #   QBO_CLIENT_ID     Intuit app, phase 2
 #   QBO_CLIENT_SECRET Intuit app, phase 2
 #   QBO_REFRESH_TOKEN Intuit OAuth, phase 2
-#   GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET / GMAIL_REFRESH_TOKEN, phase 2
+#   GMAIL_CLIENT_ID     Google Cloud OAuth client
+#   GMAIL_CLIENT_SECRET
+#   GMAIL_REFRESH_TOKEN one-time consent by Adrian, then it refreshes itself

@@ -125,6 +125,41 @@ await t('unknown admin routes 404', async () => {
   assert(r.status === 404, 'status ' + r.status);
 });
 
+await t('send hands back the payment link when email is not connected', async () => {
+  const q = await db.prepare('select id from quotes order by id desc limit 1').first();
+  const r = await A('/quotes/' + q.id + '/send', { method: 'POST' });
+  const j = await r.json();
+  assert(r.status === 503, 'status ' + r.status);
+  assert(/pay\.sandbox\.sentoo\.io/.test(j.error), 'no link in the message: ' + j.error);
+  const after = await db.prepare('select sentoo_url from quotes where id = ?').bind(q.id).first();
+  assert(after.sentoo_url, 'link was not stored');
+});
+
+await t('the payment link is built from the quote total', async () => {
+  const q = await db.prepare('select * from quotes order by id desc limit 1').first();
+  assert(q.total_cents === 8750, 'total drifted: ' + q.total_cents);
+  assert(q.sentoo_uid, 'no transaction id');
+});
+
+await t('marking paid by hand flips the order too', async () => {
+  const q = await db.prepare('select id, order_id from quotes order by id desc limit 1').first();
+  const r = await A('/quotes/' + q.id + '/paid', { method: 'POST', body: JSON.stringify({ how: 'Cash at the shop' }) });
+  assert(r.status === 200, 'status ' + r.status);
+  const order = await db.prepare('select status from orders where id = ?').bind(q.order_id).first();
+  const quote = await db.prepare('select status, paid_at from quotes where id = ?').bind(q.id).first();
+  assert(order.status === 'paid', 'order is ' + order.status);
+  assert(quote.status === 'paid' && quote.paid_at, 'quote not marked paid');
+  const ev = await db.prepare("select detail from order_events where order_id = ? and kind = 'payment' order by id desc").bind(q.order_id).first();
+  assert(/Cash at the shop/.test(ev.detail), 'reason not recorded');
+});
+
+await t('a paid quote is not sent again by accident', async () => {
+  const q = await db.prepare('select id from quotes order by id desc limit 1').first();
+  const detail = await (await A('/orders/1')).json();
+  assert(detail.quotes[0].status === 'paid', 'expected paid');
+  assert(detail.lines.length === 2, 'quote lines missing from the payload');
+});
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 await mf.dispose();
 process.exit(fail ? 1 : 0);
