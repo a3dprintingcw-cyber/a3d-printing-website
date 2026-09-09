@@ -363,9 +363,16 @@ export async function adminRoutes(request, env, url, email) {
     const lines = quotes.results.length
       ? (await env.DB.prepare('SELECT * FROM quote_lines WHERE quote_id IN (SELECT id FROM quotes WHERE order_id = ?) ORDER BY quote_id, position').bind(id).all()).results
       : [];
+    // The quote builder needs the price list and the tax rate so it can price a
+    // line the moment it is picked, and show the same total the server will save.
+    const priceList = await env.DB.prepare(
+      'SELECT id, sku, name, description, unit_cents FROM price_list WHERE active = 1 ORDER BY position, id',
+    ).all();
+    const taxPct = Number((await env.DB.prepare("SELECT value FROM settings WHERE key = 'tax_rate_pct'").first())?.value || 0);
     return json({
       order, files: files.results, events: events.results, quotes: quotes.results,
       lines, history: history.results, gmail: await gmailReady(env),
+      prices: priceList.results, taxPct,
     });
   }
 
