@@ -704,7 +704,7 @@ body.mode-switching [data-content-for] { animation: mode-in .38s cubic-bezier(.2
   display: flex;
   width: max-content;
   gap: 64px;
-  animation: client-scroll 34s linear infinite;
+  animation: client-scroll 46s linear infinite;
 }
 .client-marquee:hover .client-track,
 .client-marquee:focus-within .client-track { animation-play-state: paused; }
