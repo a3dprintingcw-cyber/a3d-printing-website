@@ -1,0 +1,59 @@
+# A3D Printing back office
+#
+# Deploy targets two path prefixes on the live domain, so the marketing site
+# stays exactly where it is on GitHub Pages:
+#
+#   a3dprinting.com/api/*    the intake API, webhooks and the analytics beacon
+#   a3dprinting.com/admin*   the back office itself
+#
+# Both routes need the a3dprinting.com DNS record to be proxied through
+# Cloudflare (orange cloud), otherwise the Worker never sees the request.
+
+name = "a3d-backoffice"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+workers_dev = false
+
+routes = [
+  { pattern = "a3dprinting.com/api/*", zone_name = "a3dprinting.com" },
+  { pattern = "a3dprinting.com/admin", zone_name = "a3dprinting.com" },
+  { pattern = "a3dprinting.com/admin/*", zone_name = "a3dprinting.com" },
+]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "a3d"
+database_id = "REPLACE_AFTER_CREATING_THE_DATABASE"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "a3d-uploads"
+
+# Alerts to Adrian. Needs Email Routing on the zone and the destination
+# address verified once. Without it the Worker still records the order and
+# simply skips the email.
+[[send_email]]
+name = "ALERTS"
+destination_address = "a3dprinting.cw@gmail.com"
+
+[vars]
+ADMIN_EMAIL = "a3dprinting.cw@gmail.com"
+BUSINESS_NAME = "A3D Printing"
+CURRENCY = "XCG"
+PUBLIC_ORIGIN = "https://a3dprinting.com"
+MAX_UPLOAD_MB = "50"
+# Cloudflare Access team domain, e.g. "a3dprinting" for a3dprinting.cloudflareaccess.com
+CF_ACCESS_TEAM = "REPLACE_WITH_TEAM_NAME"
+CF_ACCESS_AUD = "REPLACE_WITH_APPLICATION_AUD"
+# sandbox until Sentoo issues production credentials
+SENTOO_BASE = "https://api.sandbox.sentoo.io"
+SENTOO_MODE = "mock"
+
+# Secrets, set with `wrangler secret put NAME` (never in this file):
+#   SENTOO_MERCHANT   merchant uid from the Sentoo portal
+#   SENTOO_SECRET     value for the X-SENTOO-SECRET header
+#   QBO_CLIENT_ID     Intuit app, phase 2
+#   QBO_CLIENT_SECRET Intuit app, phase 2
+#   QBO_REFRESH_TOKEN Intuit OAuth, phase 2
+#   GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET / GMAIL_REFRESH_TOKEN, phase 2
