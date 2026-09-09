@@ -93,15 +93,72 @@ function encodeHeader(text) {
   return /^[\x20-\x7E]*$/.test(text) ? text : '=?UTF-8?B?' + b64url(text).replace(/-/g, '+').replace(/_/g, '/') + '?=';
 }
 
+/** Raw bytes to base64, in chunks so a big PDF cannot blow the call stack. */
+function bytesToBase64(bytes) {
+  let bin = '';
+  const step = 0x8000;
+  for (let i = 0; i < bytes.length; i += step) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + step));
+  }
+  return btoa(bin);
+}
+
+/** Base64 wrapped at 76 characters, which is what RFC 2045 asks for. */
+function wrap76(b64) {
+  return b64.replace(/(.{76})/g, '$1\r\n');
+}
+
 /**
- * Sends a multipart alternative message and returns the Gmail message id.
+ * Sends the message and returns the Gmail message id. Text and HTML always,
+ * plus optional attachments as [{ filename, mimeType, bytes }].
  */
-export async function sendMail(env, { to, subject, text, html, replyTo }) {
+export async function sendMail(env, { to, subject, text, html, replyTo, attachments }) {
   const conf = await gmailConfig(env);
   if (!conf.clientId || !conf.clientSecret || !conf.refreshToken) throw new Error('gmail: not connected yet');
   const token = await accessToken(env, conf);
   const from = conf.account || env.ADMIN_EMAIL;
-  const boundary = 'a3d' + Math.random().toString(16).slice(2);
+  const alt = 'alt' + Math.random().toString(16).slice(2);
+  const files = (attachments || []).filter((a) => a && a.bytes && a.bytes.length);
+  const mixed = files.length ? 'mix' + Math.random().toString(16).slice(2) : null;
+
+  const body = [
+    '--' + alt,
+    'Content-Type: text/plain; charset=UTF-8',
+    '',
+    text,
+    '',
+    '--' + alt,
+    'Content-Type: text/html; charset=UTF-8',
+    '',
+    html,
+    '',
+    '--' + alt + '--',
+  ];
+
+  let parts;
+  if (mixed) {
+    parts = [
+      '--' + mixed,
+      'Content-Type: multipart/alternative; boundary="' + alt + '"',
+      '',
+      ...body,
+      '',
+    ];
+    for (const f of files) {
+      parts.push(
+        '--' + mixed,
+        'Content-Type: ' + (f.mimeType || 'application/octet-stream') + '; name="' + f.filename + '"',
+        'Content-Disposition: attachment; filename="' + f.filename + '"',
+        'Content-Transfer-Encoding: base64',
+        '',
+        wrap76(bytesToBase64(f.bytes)),
+        '',
+      );
+    }
+    parts.push('--' + mixed + '--', '');
+  } else {
+    parts = [...body, ''];
+  }
 
   const raw = [
     'From: ' + encodeHeader(env.BUSINESS_NAME) + ' <' + from + '>',
@@ -109,20 +166,11 @@ export async function sendMail(env, { to, subject, text, html, replyTo }) {
     replyTo ? 'Reply-To: ' + replyTo : null,
     'Subject: ' + encodeHeader(subject),
     'MIME-Version: 1.0',
-    'Content-Type: multipart/alternative; boundary="' + boundary + '"',
+    mixed
+      ? 'Content-Type: multipart/mixed; boundary="' + mixed + '"'
+      : 'Content-Type: multipart/alternative; boundary="' + alt + '"',
     '',
-    '--' + boundary,
-    'Content-Type: text/plain; charset=UTF-8',
-    '',
-    text,
-    '',
-    '--' + boundary,
-    'Content-Type: text/html; charset=UTF-8',
-    '',
-    html,
-    '',
-    '--' + boundary + '--',
-    '',
+    ...parts,
   ].filter((l) => l !== null).join('\r\n');
 
   const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
@@ -139,14 +187,15 @@ export async function sendMail(env, { to, subject, text, html, replyTo }) {
  * The quote email. Plain text first because that is what half of Curaçao
  * reads it on, HTML for everyone else.
  */
-export function quoteEmail({ business, order, customer, quote, lines, payUrl, currency }) {
+export function quoteEmail({ business, order, customer, quote, lines, payUrl, currency, estimateNo }) {
   const money = (cents) => currency + ' ' + (cents / 100).toFixed(2);
   const validUntil = quote.valid_until ? new Date(quote.valid_until).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null;
 
   const textLines = [
     'Hi ' + customer.name + ',',
     '',
-    'Thanks for your request. Here is the quote for ' + order.ref + ':',
+    'Thanks for your request. Here is the quote for ' + order.ref +
+      (estimateNo ? ' (quotation ' + estimateNo + ', attached)' : '') + ':',
     '',
     ...lines.map((l) => '  ' + l.qty + ' x ' + l.description + '   ' + money(l.line_cents)),
     '',
@@ -171,7 +220,8 @@ export function quoteEmail({ business, order, customer, quote, lines, payUrl, cu
   const html = [
     '<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:520px;color:#14161a">',
     '<p>Hi ' + escapeHtml(customer.name) + ',</p>',
-    '<p>Thanks for your request. Here is the quote for <b>' + escapeHtml(order.ref) + '</b>:</p>',
+    '<p>Thanks for your request. Here is the quote for <b>' + escapeHtml(order.ref) + '</b>' +
+      (estimateNo ? ', quotation <b>' + escapeHtml(estimateNo) + '</b>, attached as a PDF' : '') + ':</p>',
     '<table style="width:100%;border-collapse:collapse;font-size:15px">' + rows,
     quote.tax_cents ? '<tr><td style="padding:6px 0;border-top:1px solid #e3e7ef">Subtotal</td><td style="padding:6px 0;border-top:1px solid #e3e7ef;text-align:right">' + money(quote.subtotal_cents) + '</td></tr>' : '',
     quote.tax_cents ? '<tr><td style="padding:6px 0">Tax</td><td style="padding:6px 0;text-align:right">' + money(quote.tax_cents) + '</td></tr>' : '',
