@@ -3,6 +3,7 @@ import { alertAdmin, newOrderAlert } from './email.js';
 import { createPayment, fetchStatus, isMock } from './sentoo.js';
 import { sendMail, quoteEmail, isConfigured as gmailReady, gmailConfig, exchangeCode, GMAIL_SCOPES } from './gmail.js';
 import { getSetting, setSetting } from './settings.js';
+import * as qbo from './qbo.js';
 import { ADMIN_HTML } from './admin-html.js';
 
 const ALLOWED_EXT = ['stl', 'obj', '3mf', 'step', 'stp', 'png', 'jpg', 'jpeg', 'pdf', 'webp'];
@@ -147,6 +148,89 @@ async function handleBeacon(request, env) {
 // Applies a Sentoo status to a quote exactly once. Used by both the webhook
 // and the safety-net poller, so a missed callback can never leave an order
 // sitting unpaid in the back office while the money is in the bank.
+// ------------------------------------------------------------- QuickBooks
+//
+// Both helpers swallow their own failures on purpose. QuickBooks being down is
+// an accounting inconvenience; it is never a reason to lose a customer's quote
+// or to fail to notice that they paid. The error is written to the quote row so
+// it shows up in the back office instead of disappearing into a log.
+
+async function noteQboError(env, quoteId, err) {
+  console.log('qbo error on quote', quoteId, err.message);
+  await env.DB.prepare('UPDATE quotes SET qbo_error = ? WHERE id = ?')
+    .bind(String(err.message).slice(0, 300), quoteId).run().catch(() => {});
+}
+
+/** Creates the QuickBooks estimate for a freshly built quote. */
+async function syncEstimate(env, quoteId) {
+  if (!(await qbo.isConfigured(env))) return null;
+  const quote = await env.DB.prepare('SELECT * FROM quotes WHERE id = ?').bind(quoteId).first();
+  if (!quote || quote.qbo_estimate_id) return quote ? quote.qbo_estimate_id : null;
+  try {
+    const conf = await qbo.qboConfig(env);
+    const order = await env.DB.prepare('SELECT * FROM orders WHERE id = ?').bind(quote.order_id).first();
+    const customer = await env.DB.prepare('SELECT * FROM customers WHERE id = ?').bind(order.customer_id).first();
+    let qboCustomerId = customer.qbo_customer_id;
+    if (!qboCustomerId) {
+      qboCustomerId = await qbo.findOrCreateCustomer(env, conf, {
+        name: customer.name, email: customer.email, phone: customer.phone,
+      });
+      await env.DB.prepare('UPDATE customers SET qbo_customer_id = ? WHERE id = ?')
+        .bind(qboCustomerId, customer.id).run();
+    }
+    const lines = (await env.DB.prepare('SELECT * FROM quote_lines WHERE quote_id = ? ORDER BY position')
+      .bind(quoteId).all()).results;
+    const est = await qbo.createEstimate(env, conf, {
+      customerId: qboCustomerId,
+      lines: lines.map((l) => ({ description: l.description, qty: l.qty, unit_cents: l.unit_cents })),
+      ref: order.ref,
+      validUntil: quote.valid_until,
+      currency: conf.currency || null,
+      customerEmail: customer.email,
+    });
+    await env.DB.prepare('UPDATE quotes SET qbo_estimate_id = ?, qbo_estimate_no = ?, qbo_error = NULL WHERE id = ?')
+      .bind(est.id, est.number, quoteId).run();
+    await env.DB.prepare('INSERT INTO order_events (order_id, kind, detail) VALUES (?, ?, ?)')
+      .bind(quote.order_id, 'quickbooks', 'Estimate ' + est.number + ' created').run();
+    return est.id;
+  } catch (err) {
+    await noteQboError(env, quoteId, err);
+    return null;
+  }
+}
+
+/** Turns the estimate into a paid invoice once the money has actually landed. */
+async function syncInvoice(env, quoteId, how) {
+  if (!(await qbo.isConfigured(env))) return;
+  const quote = await env.DB.prepare('SELECT * FROM quotes WHERE id = ?').bind(quoteId).first();
+  if (!quote || quote.qbo_invoice_id) return;
+  try {
+    const conf = await qbo.qboConfig(env);
+    let estimateId = quote.qbo_estimate_id;
+    if (!estimateId) estimateId = await syncEstimate(env, quoteId);
+    if (!estimateId) return;
+    const order = await env.DB.prepare('SELECT * FROM orders WHERE id = ?').bind(quote.order_id).first();
+    const customer = await env.DB.prepare('SELECT * FROM customers WHERE id = ?').bind(order.customer_id).first();
+    const inv = await qbo.invoiceFromEstimate(env, conf, estimateId);
+    await env.DB.prepare('UPDATE quotes SET qbo_invoice_id = ?, qbo_invoice_no = ? WHERE id = ?')
+      .bind(inv.id, inv.number, quoteId).run();
+    // The amount comes off the invoice QuickBooks just built, not off our
+    // cents, so no rounding gap can leave a balance of one cent open forever.
+    await qbo.recordPayment(env, conf, {
+      customerId: customer.qbo_customer_id,
+      invoiceId: inv.id,
+      amount: inv.total,
+      currency: conf.currency || null,
+      note: how || 'Paid online',
+    });
+    await env.DB.prepare('UPDATE quotes SET qbo_error = NULL WHERE id = ?').bind(quoteId).run();
+    await env.DB.prepare('INSERT INTO order_events (order_id, kind, detail) VALUES (?, ?, ?)')
+      .bind(quote.order_id, 'quickbooks', 'Invoice ' + inv.number + ' created and marked paid').run();
+  } catch (err) {
+    await noteQboError(env, quoteId, err);
+  }
+}
+
 async function applyPaymentStatus(env, quote, status) {
   if (quote.sentoo_status === status) return false;
   const paid = status === 'success' || status === 'paid';
@@ -160,6 +244,7 @@ async function applyPaymentStatus(env, quote, status) {
   }
   await env.DB.prepare('INSERT INTO order_events (order_id, kind, detail) VALUES (?, ?, ?)')
     .bind(quote.order_id, 'payment', 'Sentoo status: ' + status).run();
+  if (paid) await syncInvoice(env, quote.id, 'Paid online through Sentoo');
   return paid;
 }
 
@@ -199,10 +284,16 @@ export async function adminRoutes(request, env, url, email) {
 
   if (p === '/me') {
     const g = await gmailConfig(env);
+    const qc = await qbo.qboConfig(env);
     return json({
       email,
       sentoo: isMock(env) ? 'mock' : 'live',
       gmail: { connected: Boolean(g.clientId && g.clientSecret && g.refreshToken), hasApp: Boolean(g.clientId && g.clientSecret), account: g.account },
+      qbo: {
+        connected: Boolean(qc.clientId && qc.clientSecret && qc.refreshToken && qc.realmId),
+        hasApp: Boolean(qc.clientId && qc.clientSecret),
+        company: qc.company, currency: qc.currency, sandbox: qc.sandbox,
+      },
     });
   }
 
@@ -280,6 +371,70 @@ export async function adminRoutes(request, env, url, email) {
       return bad('Google refused the send: ' + e.message, 502);
     }
     return json({ ok: true, sentTo: env.ADMIN_EMAIL });
+  }
+
+  // --- connecting QuickBooks, same shape as Gmail ------------------------
+
+  if (p === '/qbo/app' && method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    const id = String(body.client_id || '').trim();
+    const secret = String(body.client_secret || '').trim();
+    if (!id || !secret) return bad('Both the client id and the client secret are needed.');
+    await setSetting(env, 'qbo_client_id', id);
+    await setSetting(env, 'qbo_client_secret', secret);
+    await setSetting(env, 'qbo_sandbox', body.sandbox ? '1' : null);
+    return json({ ok: true, redirectUri: url.origin + '/api/admin/qbo/callback' });
+  }
+
+  if (p === '/qbo/start' && method === 'GET') {
+    const conf = await qbo.qboConfig(env);
+    if (!conf.clientId || !conf.clientSecret) return bad('Save the client id and secret first.');
+    const state = crypto.randomUUID();
+    await setSetting(env, 'qbo_oauth_state', state + '|' + Date.now());
+    const auth = new URL('https://appcenter.intuit.com/connect/oauth2');
+    auth.searchParams.set('client_id', conf.clientId);
+    auth.searchParams.set('redirect_uri', url.origin + '/api/admin/qbo/callback');
+    auth.searchParams.set('response_type', 'code');
+    auth.searchParams.set('scope', qbo.QBO_SCOPES);
+    auth.searchParams.set('state', state);
+    return Response.redirect(auth.toString(), 302);
+  }
+
+  if (p === '/qbo/callback' && method === 'GET') {
+    const done = (msg, ok) => Response.redirect(url.origin + '/admin#/settings?' +
+      (ok ? 'connected=quickbooks' : 'error=' + encodeURIComponent(msg)), 302);
+    const err = url.searchParams.get('error');
+    if (err) return done(err === 'access_denied' ? 'You cancelled the QuickBooks approval.' : err, false);
+    const code = url.searchParams.get('code');
+    const state = url.searchParams.get('state');
+    const realmId = url.searchParams.get('realmId');
+    const saved = await getSetting(env, 'qbo_oauth_state');
+    await setSetting(env, 'qbo_oauth_state', null);
+    if (!code || !saved || saved.split('|')[0] !== state) return done('That approval link was stale. Try Connect again.', false);
+    if (!realmId) return done('QuickBooks did not say which company to use. Try Connect again.', false);
+    const conf = await qbo.qboConfig(env);
+    try {
+      const res = await qbo.exchangeCode(conf.clientId, conf.clientSecret, code, url.origin + '/api/admin/qbo/callback');
+      await setSetting(env, 'qbo_refresh_token', res.refreshToken);
+      await setSetting(env, 'qbo_realm_id', realmId);
+      // Read the company back so the back office can show which one is wired
+      // up, and so estimates are raised in the currency QuickBooks expects.
+      const now = await qbo.qboConfig(env);
+      const info = await qbo.companyInfo(env, now);
+      await setSetting(env, 'qbo_company', info.name);
+      await setSetting(env, 'qbo_currency', info.currency);
+    } catch (e) {
+      return done(e.message, false);
+    }
+    return done('', true);
+  }
+
+  if (p === '/qbo/disconnect' && method === 'POST') {
+    for (const k of ['qbo_client_id', 'qbo_client_secret', 'qbo_refresh_token', 'qbo_realm_id',
+      'qbo_sandbox', 'qbo_company', 'qbo_currency', 'qbo_oauth_state']) {
+      await setSetting(env, k, null);
+    }
+    return json({ ok: true });
   }
 
   if (p === '/gmail/disconnect' && method === 'POST') {
@@ -463,6 +618,10 @@ export async function adminRoutes(request, env, url, email) {
       ).bind(quote.id, l.description, l.qty, l.unit_cents, Math.round(l.qty * l.unit_cents), i),
     ));
 
+    // The QuickBooks estimate is the customer-facing quotation, numbered by
+    // QuickBooks so the number on the email matches the number in his books.
+    await syncEstimate(env, quote.id);
+
     let payment = null;
     if (body.withPaymentLink !== false) {
       try {
@@ -524,16 +683,43 @@ export async function adminRoutes(request, env, url, email) {
       return bad('Email is not connected yet. The payment link is ready: ' + payUrl, 503);
     }
 
+    // Make sure the estimate exists before the email goes out, so the customer
+    // sees the QuickBooks number and gets the QuickBooks PDF.
+    const fresh = await env.DB.prepare('SELECT * FROM quotes WHERE id = ?').bind(quoteId).first();
+    let estimateId = fresh.qbo_estimate_id;
+    if (!estimateId) estimateId = await syncEstimate(env, quoteId);
+    const withNo = await env.DB.prepare('SELECT qbo_estimate_no FROM quotes WHERE id = ?').bind(quoteId).first();
+
     const body = quoteEmail({
       business: env.BUSINESS_NAME, order, customer: { name: order.customer_name }, quote,
       lines, payUrl, currency: quote.currency || env.CURRENCY || 'XCG',
+      estimateNo: withNo && withNo.qbo_estimate_no,
     });
+
+    const attachments = [];
+    if (estimateId) {
+      try {
+        const conf = await qbo.qboConfig(env);
+        const pdf = await qbo.estimatePdf(env, conf, estimateId);
+        attachments.push({
+          filename: 'Quote-' + ((withNo && withNo.qbo_estimate_no) || order.ref) + '.pdf',
+          mimeType: 'application/pdf',
+          bytes: pdf,
+        });
+      } catch (err) {
+        // A missing PDF is not worth holding up the quote. The email still
+        // carries the lines and the total in its own body.
+        console.log('qbo pdf failed', err.message);
+      }
+    }
+
     try {
       await sendMail(env, {
         to: order.customer_email,
-        subject: env.BUSINESS_NAME + ' quote ' + order.ref,
+        subject: env.BUSINESS_NAME + ' quote ' + ((withNo && withNo.qbo_estimate_no) || order.ref),
         text: body.text,
         html: body.html,
+        attachments,
       });
     } catch (err) {
       return bad('The quote could not be emailed: ' + err.message, 502);
@@ -558,6 +744,7 @@ export async function adminRoutes(request, env, url, email) {
     await env.DB.prepare("UPDATE orders SET status = 'paid', updated_at = datetime('now') WHERE id = ?").bind(quote.order_id).run();
     await env.DB.prepare('INSERT INTO order_events (order_id, kind, detail) VALUES (?, ?, ?)')
       .bind(quote.order_id, 'payment', how).run();
+    await syncInvoice(env, quoteId, how);
     return json({ ok: true });
   }
 
