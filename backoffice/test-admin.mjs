@@ -160,6 +160,77 @@ await t('a paid quote is not sent again by accident', async () => {
   assert(detail.lines.length === 2, 'quote lines missing from the payload');
 });
 
+// ------------------------------------------------- connecting Gmail
+
+await t('gmail starts out disconnected', async () => {
+  const j = await (await A('/me')).json();
+  assert(j.gmail && j.gmail.connected === false, 'should not be connected');
+  assert(j.gmail.hasApp === false, 'should have no app yet');
+});
+
+await t('a client id that is not a Google one is refused', async () => {
+  const r = await A('/gmail/app', { method: 'POST', body: JSON.stringify({ client_id: 'nope', client_secret: 'x' }) });
+  assert(r.status === 400, 'status ' + r.status);
+  const row = await db.prepare("select value from settings where key = 'gmail_client_id'").first();
+  assert(!row, 'a bad id should not be stored');
+});
+
+await t('saving the app details reports the callback URL back', async () => {
+  const r = await A('/gmail/app', {
+    method: 'POST',
+    body: JSON.stringify({ client_id: '123.apps.googleusercontent.com', client_secret: 'GOCSPX-secret' }),
+  });
+  const j = await r.json();
+  assert(j.redirectUri === 'https://a3dprinting.com/api/admin/gmail/callback', 'redirect ' + j.redirectUri);
+  const me = await (await A('/me')).json();
+  assert(me.gmail.hasApp === true, 'app should be saved');
+  assert(me.gmail.connected === false, 'still needs the consent step');
+});
+
+await t('the secret never comes back out of the API', async () => {
+  const body = await (await A('/me')).text();
+  assert(!body.includes('GOCSPX-secret'), 'the client secret leaked into a response');
+});
+
+await t('start sends you to Google asking for offline access', async () => {
+  const r = await A('/gmail/start', { redirect: 'manual' });
+  assert(r.status === 302, 'status ' + r.status);
+  const to = new URL(r.headers.get('location'));
+  assert(to.host === 'accounts.google.com', 'host ' + to.host);
+  assert(to.searchParams.get('access_type') === 'offline', 'needs offline access for a refresh token');
+  assert(to.searchParams.get('redirect_uri') === 'https://a3dprinting.com/api/admin/gmail/callback', 'wrong redirect');
+  assert(to.searchParams.get('scope').includes('gmail.send'), 'wrong scope');
+  const state = await db.prepare("select value from settings where key = 'gmail_oauth_state'").first();
+  assert(state && state.value.split('|')[0] === to.searchParams.get('state'), 'state not remembered');
+});
+
+await t('a callback with the wrong state is thrown away', async () => {
+  const r = await A('/gmail/callback?code=abc&state=not-the-one', { redirect: 'manual' });
+  assert(r.status === 302, 'status ' + r.status);
+  assert(r.headers.get('location').includes('error='), 'should have refused');
+  const tok = await db.prepare("select value from settings where key = 'gmail_refresh_token'").first();
+  assert(!tok, 'nothing should have been stored');
+});
+
+await t('a cancelled approval says so instead of breaking', async () => {
+  const r = await A('/gmail/callback?error=access_denied', { redirect: 'manual' });
+  assert(r.headers.get('location').includes('error='), 'should carry the message');
+});
+
+await t('sending is still refused while the consent step is unfinished', async () => {
+  const r = await A('/gmail/test', { method: 'POST' });
+  assert(r.status === 400, 'status ' + r.status);
+});
+
+await t('disconnect clears every trace', async () => {
+  await db.prepare("insert into settings (key, value) values ('gmail_refresh_token', 'pretend') on conflict(key) do update set value = excluded.value").run();
+  await A('/gmail/disconnect', { method: 'POST' });
+  const rows = await db.prepare("select key from settings where key like 'gmail_%'").all();
+  assert(rows.results.length === 0, 'left behind: ' + rows.results.map(r => r.key).join(','));
+  const me = await (await A('/me')).json();
+  assert(me.gmail.connected === false && me.gmail.hasApp === false, 'still looks connected');
+});
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 await mf.dispose();
 process.exit(fail ? 1 : 0);
