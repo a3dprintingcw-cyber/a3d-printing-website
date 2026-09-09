@@ -8,7 +8,7 @@
 import { sendMail, isConfigured } from './gmail.js';
 
 export async function alertAdmin(env, subject, text) {
-  if (!isConfigured(env)) {
+  if (!(await isConfigured(env))) {
     console.log('email: gmail not connected, skipping alert:', subject);
     return false;
   }
