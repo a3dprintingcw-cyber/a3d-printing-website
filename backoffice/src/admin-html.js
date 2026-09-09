@@ -89,15 +89,26 @@ export const ADMIN_HTML = String.raw`<!doctype html>
     .grid2 { grid-template-columns:1fr; }
     main { padding:20px; }
   }
+  .lines thead th { text-align:left; font-size:12px; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--ink-soft); font-weight:600; padding:0 8px 6px; }
+  .lines td { padding:4px 8px; vertical-align:middle; }
+  .lines select.pick { width:100%; margin-bottom:5px; padding:6px 8px; border-radius:8px;
+    border:1px solid var(--border); background:var(--paper); color:var(--ink-soft); font-size:13px; }
+  .lines .lt { font-variant-numeric:tabular-nums; color:var(--ink); }
+  .qsum { margin-top:12px; padding-top:12px; border-top:1px solid var(--border); max-width:340px; margin-left:auto; }
+  .qrow { display:flex; justify-content:space-between; gap:20px; padding:3px 0; color:var(--ink-soft); font-size:14px; }
+  .qrow b { color:var(--ink); font-variant-numeric:tabular-nums; }
+  .qrow.total { border-top:1px solid var(--border); margin-top:6px; padding-top:8px; font-size:17px; color:var(--ink); }
+  .qwarn { margin-top:10px; font-size:13px; line-height:1.5; color:var(--warn); }
   .flash.ok { background:#0f3a24; border-color:#1c6b41; color:#b8f0d0; }
   .steps { margin:12px 0 16px; padding-left:20px; line-height:1.9; }
   .steps code.copy { background:var(--card); padding:3px 8px; border-radius:6px; font-size:13px; }
   .steps code.copy.copied { outline:2px solid var(--blue); }
   button.small { padding:4px 10px; font-size:13px; }
   #view .card + .card { margin-top:16px; }
-  .form label { display:block; margin:10px 0; font-size:13px; color:var(--muted); }
+  .form label { display:block; margin:10px 0; font-size:13px; color:var(--ink-soft); }
   .form input { display:block; width:100%; max-width:520px; margin-top:4px; padding:9px 11px;
-    border-radius:9px; border:1px solid var(--line); background:var(--bg); color:var(--ink); font-size:14px; }
+    border-radius:9px; border:1px solid var(--border); background:var(--paper); color:var(--ink); font-size:14px; }
 </style>
 </head>
 <body>
@@ -304,10 +315,16 @@ function orderDetail(id) {
         html += '</div>';
       });
     }
-    html += '<div class="card"><h2 style="margin-top:0">Build a quote</h2><table class="lines" id="lines"></table>' +
-      '<div class="bar" style="margin-top:10px"><button onclick="addLine()">Add line</button>' +
-      '<button class="primary" onclick="saveQuote(' + o.id + ')">Create quote and payment link</button>' +
-      '<span id="qtotal" class="muted"></span></div></div>';
+    PRICES = d.prices || [];
+    TAX_PCT = d.taxPct || 0;
+    html += '<div class="card"><h2 style="margin-top:0">Build a quote</h2>' +
+      '<table class="lines" id="lines"><thead><tr><th>Item</th><th style="width:78px">Qty</th>' +
+      '<th style="width:120px">Price each</th><th style="width:120px;text-align:right">Line</th><th style="width:34px"></th>' +
+      '</tr></thead><tbody></tbody></table>' +
+      '<div class="bar" style="margin-top:10px"><button onclick="addLine()">Add line</button></div>' +
+      '<div id="qsum" class="qsum"></div>' +
+      '<div class="bar" style="margin-top:14px">' +
+      '<button class="primary" onclick="saveQuote(' + o.id + ')">Create quote and payment link</button></div></div>';
 
     html += '</div><div>';
     html += '<div class="card"><h2 style="margin-top:0">Customer</h2><dl class="kv">' +
@@ -340,34 +357,95 @@ function orderDetail(id) {
   }).catch(showError);
 }
 
+var PRICES = [];
+var TAX_PCT = 0;
+
 function addLine() {
-  var t = document.getElementById('lines');
+  var t = document.querySelector('#lines tbody');
   if (!t) return;
   var row = t.insertRow(-1);
-  row.innerHTML = '<td><input type="text" class="d" placeholder="What are we making"></td>' +
-    '<td style="width:70px"><input type="number" class="q" value="1" min="0" step="1" oninput="recalc()"></td>' +
-    '<td style="width:110px"><input type="number" class="u" placeholder="' + CUR + '" min="0" step="0.01" oninput="recalc()"></td>' +
-    '<td style="width:30px"><button class="ghost" onclick="this.closest(\'tr\').remove();recalc()">&times;</button></td>';
+  var opts = '<option value="">From the price list...</option>';
+  PRICES.forEach(function (p, i) {
+    opts += '<option value="' + i + '">' + esc(p.name) + (p.unit_cents ? ' (' + money(p.unit_cents) + ')' : '') + '</option>';
+  });
+  row.innerHTML =
+    '<td>' + (PRICES.length ? '<select class="pick" onchange="fillLine(this)">' + opts + '</select>' : '') +
+      '<input type="text" class="d" placeholder="What are we making" oninput="recalc()"></td>' +
+    '<td><input type="number" class="q" value="1" min="0" step="1" oninput="recalc()"></td>' +
+    '<td><input type="number" class="u" placeholder="' + CUR + '" min="0" step="0.01" oninput="recalc()"></td>' +
+    '<td class="lt" style="text-align:right">-</td>' +
+    '<td><button class="ghost" title="Remove this line" onclick="this.closest(\'tr\').remove();recalc()">&times;</button></td>';
+  recalc();
 }
-function readLines() {
-  var rows = document.querySelectorAll('#lines tr');
+
+// Picking from the price list fills in the name and the price, and both stay
+// editable afterwards. The list is a starting point, not a straitjacket.
+function fillLine(sel) {
+  var p = PRICES[Number(sel.value)];
+  if (!p) return;
+  var row = sel.closest('tr');
+  row.querySelector('.d').value = p.name;
+  if (p.unit_cents) row.querySelector('.u').value = (p.unit_cents / 100).toFixed(2);
+  recalc();
+}
+
+// includeUnnamed is what the running total uses, so typing a price shows a
+// number straight away instead of silently counting for nothing. Saving still
+// insists on a name, because that is what the customer reads on the quote.
+function readLines(includeUnnamed) {
+  var rows = document.querySelectorAll('#lines tbody tr');
   var out = [];
   for (var i = 0; i < rows.length; i++) {
     var d = rows[i].querySelector('.d').value.trim();
     var q = parseFloat(rows[i].querySelector('.q').value || '0');
-    var u = Math.round(parseFloat(rows[i].querySelector('.u').value || '0') * 100);
-    if (d && q > 0 && u >= 0) out.push({ description: d, qty: q, unit_cents: u });
+    var raw = rows[i].querySelector('.u').value;
+    var u = Math.round((parseFloat(raw || '0') || 0) * 100);
+    var priced = raw !== '' && q > 0;
+    if ((d || includeUnnamed) && priced) out.push({ description: d, qty: q, unit_cents: u, unnamed: !d, row: rows[i] });
   }
   return out;
 }
+
 function recalc() {
-  var total = readLines().reduce(function (s, l) { return s + Math.round(l.qty * l.unit_cents); }, 0);
-  var el = document.getElementById('qtotal');
-  if (el) el.textContent = 'Total ' + money(total);
+  var rows = document.querySelectorAll('#lines tbody tr');
+  var all = readLines(true);
+  var subtotal = 0, unnamed = 0;
+  for (var i = 0; i < rows.length; i++) {
+    var hit = null;
+    for (var j = 0; j < all.length; j++) if (all[j].row === rows[i]) hit = all[j];
+    var cell = rows[i].querySelector('.lt');
+    if (hit) {
+      var line = Math.round(hit.qty * hit.unit_cents);
+      subtotal += line;
+      if (hit.unnamed) unnamed++;
+      if (cell) cell.textContent = money(line);
+    } else if (cell) {
+      cell.textContent = '-';
+    }
+  }
+  var tax = Math.round((subtotal * TAX_PCT) / 100);
+  var el = document.getElementById('qsum');
+  if (!el) return;
+  var html = '';
+  if (TAX_PCT) {
+    html += '<div class="qrow"><span>Subtotal</span><b>' + money(subtotal) + '</b></div>' +
+      '<div class="qrow"><span>Tax ' + TAX_PCT + '%</span><b>' + money(tax) + '</b></div>';
+  }
+  html += '<div class="qrow total"><span>Total</span><b>' + money(subtotal + tax) + '</b></div>';
+  if (unnamed) {
+    html += '<div class="qwarn">' + unnamed + ' line' + (unnamed > 1 ? 's have' : ' has') +
+      ' a price but no name. It is counted above, but give it a name before you create the quote so the customer knows what they are paying for.</div>';
+  }
+  el.innerHTML = html;
 }
 function saveQuote(id) {
-  var lines = readLines();
-  if (!lines.length) { alert('Add at least one line with a price.'); return; }
+  var all = readLines(true);
+  var lines = all.filter(function (l) { return !l.unnamed; })
+    .map(function (l) { return { description: l.description, qty: l.qty, unit_cents: l.unit_cents }; });
+  if (!lines.length) { alert('Add at least one line with a name and a price.'); return; }
+  if (all.length !== lines.length) {
+    if (!confirm('Some lines have a price but no name and will be left out. Create the quote anyway?')) return;
+  }
   api('/orders/' + id + '/quote', { method: 'POST', body: JSON.stringify({ lines: lines }) })
     .then(function (r) {
       var msg = 'Quote created for ' + money(r.quote.total_cents) + '.';
