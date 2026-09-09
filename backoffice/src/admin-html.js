@@ -89,6 +89,15 @@ export const ADMIN_HTML = String.raw`<!doctype html>
     .grid2 { grid-template-columns:1fr; }
     main { padding:20px; }
   }
+  .flash.ok { background:#0f3a24; border-color:#1c6b41; color:#b8f0d0; }
+  .steps { margin:12px 0 16px; padding-left:20px; line-height:1.9; }
+  .steps code.copy { background:var(--card); padding:3px 8px; border-radius:6px; font-size:13px; }
+  .steps code.copy.copied { outline:2px solid var(--blue); }
+  button.small { padding:4px 10px; font-size:13px; }
+  #view .card + .card { margin-top:16px; }
+  .form label { display:block; margin:10px 0; font-size:13px; color:var(--muted); }
+  .form input { display:block; width:100%; max-width:520px; margin-top:4px; padding:9px 11px;
+    border-radius:9px; border:1px solid var(--line); background:var(--bg); color:var(--ink); font-size:14px; }
 </style>
 </head>
 <body>
@@ -100,6 +109,7 @@ export const ADMIN_HTML = String.raw`<!doctype html>
       <a href="#/orders" data-route="orders">Orders</a>
       <a href="#/customers" data-route="customers">Customers</a>
       <a href="#/prices" data-route="prices">Prices</a>
+      <a href="#/settings" data-route="settings">Settings</a>
     </nav>
     <div class="who" id="who"></div>
   </aside>
@@ -139,9 +149,10 @@ function pill(status) {
 }
 
 function setNav(route) {
+  var r = String(route).split('?')[0];
   var links = document.querySelectorAll('#nav a');
   for (var i = 0; i < links.length; i++) {
-    links[i].className = links[i].getAttribute('data-route') === route ? 'on' : '';
+    links[i].className = links[i].getAttribute('data-route') === r ? 'on' : '';
   }
 }
 
@@ -441,6 +452,74 @@ function savePrices() {
     .then(function () { alert('Saved.'); }).catch(showError);
 }
 
+// -------------------------------------------------------------- settings
+function settings() {
+  var flash = '';
+  var q = location.hash.split('?')[1] || '';
+  if (q.indexOf('connected=gmail') !== -1) flash = '<div class="flash ok">Gmail is connected. Send yourself a test below.</div>';
+  var m = /error=([^&]*)/.exec(q);
+  if (m) flash = '<div class="flash">' + esc(decodeURIComponent(m[1])) + '</div>';
+
+  api('/me').then(function (me) {
+    var g = me.gmail || {};
+    var redirect = location.origin + '/api/admin/gmail/callback';
+    var html = '<h1>Settings</h1><p class="sub">Connections the back office uses to do its job.</p>' + flash;
+
+    html += '<div class="card"><h2>Email</h2>';
+    if (g.connected) {
+      html += '<p>Connected. Quotes go out from <b>' + esc(g.account || me.email) + '</b> and land in that Sent folder.</p>' +
+        '<p><button class="primary" onclick="gmailTest()">Send me a test email</button> ' +
+        '<button class="ghost" onclick="gmailDisconnect()">Disconnect</button></p>';
+    } else {
+      html += '<p class="muted">Not connected yet. Until it is, pressing Send on a quote saves the quote and hands you the payment link to paste yourself.</p>' +
+        '<ol class="steps">' +
+        '<li>Open <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud credentials</a> and create an OAuth client of type <b>Web application</b>.</li>' +
+        '<li>Add this exact redirect URI to it:<br><code class="copy" id="redir">' + esc(redirect) + '</code> ' +
+        '<button class="ghost small" onclick="copyRedirect()">Copy</button></li>' +
+        '<li>Paste the client id and secret it gives you here, then press Connect.</li>' +
+        '</ol>' +
+        '<div class="form"><label>Client id<input id="gcid" placeholder="....apps.googleusercontent.com" autocomplete="off"></label>' +
+        '<label>Client secret<input id="gcs" type="password" placeholder="GOCSPX-..." autocomplete="off"></label></div>' +
+        '<p><button class="primary" onclick="gmailConnect()">Save and connect</button></p>';
+      if (g.hasApp) html += '<p class="muted">A client id is already saved. <a href="/api/admin/gmail/start">Approve it with Google</a> if you did not finish last time.</p>';
+    }
+    html += '</div>';
+
+    html += '<div class="card"><h2>Payments</h2><p>' +
+      (me.sentoo === 'mock'
+        ? 'Sentoo is in sandbox mode. Quotes still get a payment link so the whole flow can be clicked through, it just is not real money yet.'
+        : 'Sentoo is live.') +
+      '</p><p class="muted">The webhook URL to give Sentoo is <code>' + esc(location.origin) + '/api/webhooks/sentoo</code>, and <code>' + esc(location.host) + '</code> has to be on their allowed return address list.</p></div>';
+
+    view.innerHTML = html;
+  }).catch(showError);
+}
+
+function copyRedirect() {
+  var el = document.getElementById('redir');
+  navigator.clipboard.writeText(el.textContent).then(function () { el.classList.add('copied'); });
+}
+
+function gmailConnect() {
+  var id = document.getElementById('gcid').value.trim();
+  var secret = document.getElementById('gcs').value.trim();
+  if (!id || !secret) return alert('Both fields are needed.');
+  api('/gmail/app', { method: 'POST', body: JSON.stringify({ client_id: id, client_secret: secret }) })
+    .then(function () { location.href = '/api/admin/gmail/start'; })
+    .catch(function (e) { alert(e.message); });
+}
+
+function gmailTest() {
+  api('/gmail/test', { method: 'POST' })
+    .then(function (r) { alert('Sent to ' + r.sentTo + '. Check your inbox.'); })
+    .catch(function (e) { alert(e.message); });
+}
+
+function gmailDisconnect() {
+  if (!confirm('Disconnect Gmail? Quotes will stop emailing themselves until you connect it again.')) return;
+  api('/gmail/disconnect', { method: 'POST' }).then(settings).catch(showError);
+}
+
 function showError(err) {
   view.innerHTML = '<div class="flash">' + esc(err.message) + '</div>';
 }
@@ -453,6 +532,7 @@ function route() {
   if (parts[0] === 'order' && parts[1]) return orderDetail(Number(parts[1]));
   if (parts[0] === 'customers') return customers();
   if (parts[0] === 'prices') return prices();
+  if (parts[0].split('?')[0] === 'settings') return settings();
   return dashboard();
 }
 window.addEventListener('hashchange', route);
