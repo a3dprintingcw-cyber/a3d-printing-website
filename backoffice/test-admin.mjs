@@ -21,9 +21,16 @@ const mf = new Miniflare({
 const pub = mf, admin = mf;
 
 const db = await mf.getD1Database('DB');
-const sql = fs.readFileSync('/home/claude/backoffice/migrations/0001_init.sql', 'utf8')
-  .split('\n').map(l => l.replace(/--.*$/, '')).join('\n');
-for (const s of sql.split(';').map(x => x.trim()).filter(Boolean)) await db.exec(s.replace(/\s+/g, ' '));
+// Every migration, in order, so the tests run against the same schema the live
+// database has rather than only the first one.
+const migDir = '/home/claude/backoffice/migrations';
+for (const file of fs.readdirSync(migDir).filter(f => f.endsWith('.sql')).sort()) {
+  const sql = fs.readFileSync(migDir + '/' + file, 'utf8')
+    .split('\n').map(l => l.replace(/--.*$/, '')).join('\n');
+  for (const stmt of sql.split(';').map(x => x.trim()).filter(Boolean)) {
+    await db.exec(stmt.replace(/\s+/g, ' '));
+  }
+}
 
 let pass = 0, fail = 0;
 const t = async (name, fn) => {
@@ -237,6 +244,63 @@ await t('the order detail carries the price list and tax rate for the builder', 
   assert(j.prices.length === 8, 'expected 8 active price rows, got ' + j.prices.length);
   assert(j.prices[0].name && typeof j.prices[0].unit_cents !== 'undefined', 'price rows need a name and a price');
   assert(typeof j.taxPct === 'number', 'tax rate should be a number, got ' + typeof j.taxPct);
+});
+
+// ------------------------------------------------- connecting QuickBooks
+
+await t('quickbooks starts out disconnected and quotes still work', async () => {
+  const j = await (await A('/me')).json();
+  assert(j.qbo && j.qbo.connected === false, 'should not be connected');
+  const detail = await (await A('/orders/1')).json();
+  assert(detail.quotes.length > 0, 'a quote was still created without quickbooks');
+  assert(!detail.quotes[0].qbo_estimate_id, 'no estimate id expected');
+  assert(!detail.quotes[0].qbo_error, 'not being connected is not an error');
+});
+
+await t('saving the quickbooks app reports the callback URL back', async () => {
+  const r = await A('/qbo/app', {
+    method: 'POST',
+    body: JSON.stringify({ client_id: 'ABxyz', client_secret: 'shhh-intuit' }),
+  });
+  const j = await r.json();
+  assert(j.redirectUri === 'https://a3dprinting.com/api/admin/qbo/callback', 'redirect ' + j.redirectUri);
+  const me = await (await A('/me')).json();
+  assert(me.qbo.hasApp === true, 'app should be saved');
+  assert(me.qbo.connected === false, 'still needs the company approval');
+});
+
+await t('the quickbooks secret never comes back out of the API', async () => {
+  const body = await (await A('/me')).text();
+  assert(!body.includes('shhh-intuit'), 'the client secret leaked into a response');
+});
+
+await t('start sends you to Intuit with the accounting scope', async () => {
+  const r = await A('/qbo/start', { redirect: 'manual' });
+  assert(r.status === 302, 'status ' + r.status);
+  const to = new URL(r.headers.get('location'));
+  assert(to.host === 'appcenter.intuit.com', 'host ' + to.host);
+  assert(to.searchParams.get('scope') === 'com.intuit.quickbooks.accounting', 'wrong scope');
+  assert(to.searchParams.get('redirect_uri') === 'https://a3dprinting.com/api/admin/qbo/callback', 'wrong redirect');
+});
+
+await t('a callback without a company id is refused', async () => {
+  const st = await db.prepare("select value from settings where key = 'qbo_oauth_state'").first();
+  const state = st.value.split('|')[0];
+  const r = await A('/qbo/callback?code=abc&state=' + state, { redirect: 'manual' });
+  assert(r.headers.get('location').includes('error='), 'should have refused');
+  const realm = await db.prepare("select value from settings where key = 'qbo_realm_id'").first();
+  assert(!realm, 'nothing should have been stored');
+});
+
+await t('a callback with the wrong state is thrown away', async () => {
+  const r = await A('/qbo/callback?code=abc&state=nope&realmId=123', { redirect: 'manual' });
+  assert(r.headers.get('location').includes('error='), 'should have refused');
+});
+
+await t('quickbooks disconnect clears every trace', async () => {
+  await A('/qbo/disconnect', { method: 'POST' });
+  const rows = await db.prepare("select key from settings where key like 'qbo_%'").all();
+  assert(rows.results.length === 0, 'left behind: ' + rows.results.map(r => r.key).join(','));
 });
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
