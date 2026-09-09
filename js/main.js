@@ -170,7 +170,7 @@
       if (igHandle) el.textContent = igHandle;
     });
 
-    var needsSetup = !cfg.whatsappNumber || !cfg.formspreeEndpoint;
+    var needsSetup = !cfg.whatsappNumber || !(cfg.apiBase || cfg.formspreeEndpoint);
     document.querySelectorAll(".setup-banner").forEach(function (el) {
       el.style.display = needsSetup ? "flex" : "none";
     });
@@ -253,11 +253,11 @@
 
     form.addEventListener("submit", function (e) {
       e.preventDefault();
-      var endpoint = cfg.formspreeEndpoint;
+      var endpoint = cfg.apiBase ? cfg.apiBase + "/quote-request" : cfg.formspreeEndpoint;
 
       if (!endpoint) {
         status.className = "form-status err";
-        status.textContent = "This form isn't connected yet. The owner needs to add a Formspree endpoint in js/config.js. In the meantime, please use the WhatsApp button below.";
+        status.textContent = "This form isn't connected yet. The owner needs to set apiBase in js/config.js. In the meantime, please use the WhatsApp button below.";
         return;
       }
 
@@ -268,6 +268,8 @@
       status.textContent = "";
 
       var data = new FormData(form);
+      // Tell the back office which side of the site this came from.
+      data.append("mode", formId.indexOf("dev") !== -1 ? "dev" : "print");
       fetch(endpoint, {
         method: "POST",
         body: data,
@@ -275,11 +277,15 @@
       })
         .then(function (res) {
           if (res.ok) {
-            status.className = "form-status ok";
-            status.textContent = "Thanks! Your request has been sent. We'll get back to you shortly.";
-            form.reset();
-            var list = form.querySelector('[id$="file-list"]');
-            if (list) list.innerHTML = "";
+            return res.json().catch(function () { return {}; }).then(function (json) {
+              status.className = "form-status ok";
+              status.textContent = json && json.ref
+                ? "Thanks! Your request is in, reference " + json.ref + ". We'll get back to you shortly."
+                : "Thanks! Your request has been sent. We'll get back to you shortly.";
+              form.reset();
+              var list = form.querySelector('[id$="file-list"]');
+              if (list) list.innerHTML = "";
+            });
           } else {
             return res.json().then(function (json) {
               throw new Error((json && json.errors && json.errors[0] && json.errors[0].message) || "Something went wrong.");
@@ -337,12 +343,31 @@
       btn.addEventListener("click", function () { setMode(btn.getAttribute("data-mode")); syncThemeColor(); });
     });
 
+    countVisit();
+
     var navToggle = document.getElementById("nav-toggle");
     if (navToggle) navToggle.addEventListener("click", toggleNav);
     document.querySelectorAll(".mobile-nav a").forEach(function (a) {
       a.addEventListener("click", function () { body.classList.remove("nav-open"); });
     });
   });
+
+  /* ---------------- Page view count, no cookies and no third party ---------------- */
+  function countVisit() {
+    if (!cfg.apiBase) return;
+    try {
+      var payload = JSON.stringify({
+        path: location.pathname,
+        referrer: document.referrer,
+        mode: body.getAttribute("data-mode"),
+      });
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(cfg.apiBase + "/e", new Blob([payload], { type: "text/plain" }));
+      } else {
+        fetch(cfg.apiBase + "/e", { method: "POST", body: payload, keepalive: true });
+      }
+    } catch (e) {}
+  }
 
   // Apply theme immediately (before DOMContentLoaded) to avoid a flash of wrong theme.
   initTheme();
