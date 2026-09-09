@@ -24,7 +24,6 @@
       <a href="#services">Services</a>
       <a href="#scanning" data-content-for="print">Scanning</a>
       <a href="#how-it-works">Process</a>
-      <a href="#work">Work</a>
       <a href="prices.html" data-content-for="print">Prices</a>
       <a href="#quote" data-content-for="print">Quote</a>
       <a href="#quote" data-content-for="dev">Start a project</a>
@@ -47,6 +46,10 @@
       </div>
 
 
+      <a class="ig-btn" data-cfg-instagram href="#" target="_blank" rel="noopener" aria-label="A3D Printing on Instagram" title="Follow us on Instagram">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.4" cy="6.6" r="1.1" fill="currentColor" stroke="none"/></svg>
+      </a>
+
       <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Open menu">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
       </button>
@@ -58,12 +61,12 @@
   <a href="#services">Services</a>
   <a href="#scanning">Scanning</a>
   <a href="#how-it-works">How it works</a>
-  <a href="#work">Work</a>
   <a href="prices.html">Prices</a>
   <a href="#quote">Get a quote</a>
   <a href="#book" class="js-booking-nav" style="display:none">Book</a>
   <a href="#about">About</a>
   <a href="#contact">Contact</a>
+  <a class="ig-link" data-cfg-instagram href="#" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.4" cy="6.6" r="1.1" fill="currentColor" stroke="none"/></svg> Instagram</a>
 </nav>
 
 <main id="top">
@@ -83,9 +86,9 @@
 
         <div class="hero-actions">
           <a href="#quote" class="btn btn-primary" data-content-for="print">Upload a file &amp; get a quote</a>
-          <a href="#work" class="btn btn-outline" data-content-for="print">See our work</a>
+          <a href="prices.html" class="btn btn-outline" data-content-for="print">See prices</a>
           <a href="#quote" class="btn btn-primary" data-content-for="dev">Start a project</a>
-          <a href="#work" class="btn btn-outline" data-content-for="dev">See our work</a>
+          <a href="#services" class="btn btn-outline" data-content-for="dev">What we build</a>
         </div>
 
         <div class="hero-stats" data-content-for="print" data-display="flex">
@@ -128,21 +131,35 @@
   </section>
 
   <!-- ================= CLIENTS =================
-       Swap a name for a logo by replacing the <span> with an <img>:
-       <li class="client-tile"><img src="assets/img/clients/corendon.png" alt="Corendon"></li>
-       Logos are greyed back and come up to full colour on hover. -->
+       Logos live in assets/img/clients/. To add a client, drop the logo in
+       there (PNG with a transparent background works best) and add a tile to
+       BOTH lists below: the second list is an exact copy and is what makes
+       the scroll loop seamlessly. A client without a logo yet can stay a
+       plain <span> with the name. The strip scrolls by itself and pauses
+       when the pointer is over it. -->
   <section class="client-band" aria-label="Companies we have worked with">
-    <div class="container">
-      <p class="client-band-title">Companies we've worked with</p>
-      <ul class="client-strip">
-        <li class="client-tile"><span>Corendon</span></li>
-        <li class="client-tile"><span>MCB</span></li>
-        <li class="client-tile"><span>Papagayo Hotel</span></li>
+    <p class="client-band-title">Companies we've worked with</p>
+    <div class="client-marquee">
+      <div class="client-track">
+        <ul class="client-strip">
+        <li class="client-tile"><img src="assets/img/clients/corendon.png" alt="Corendon Airlines" loading="lazy"></li>
+        <li class="client-tile"><img src="assets/img/clients/mcb.png" alt="Maduro &amp; Curiel&#39;s Bank" loading="lazy"></li>
+        <li class="client-tile is-mark"><img src="assets/img/clients/papagayo.png" alt="Papagayo Hotel" loading="lazy"></li>
         <li class="client-tile"><span>Padel X</span></li>
         <li class="client-tile"><span>Select Automotive</span></li>
         <li class="client-tile"><span>Mondi Jan Thiel</span></li>
         <li class="client-tile"><span>Volcano Street Food</span></li>
-      </ul>
+        </ul>
+        <ul class="client-strip" aria-hidden="true">
+        <li class="client-tile"><img src="assets/img/clients/corendon.png" alt="Corendon Airlines" loading="lazy"></li>
+        <li class="client-tile"><img src="assets/img/clients/mcb.png" alt="Maduro &amp; Curiel&#39;s Bank" loading="lazy"></li>
+        <li class="client-tile is-mark"><img src="assets/img/clients/papagayo.png" alt="Papagayo Hotel" loading="lazy"></li>
+        <li class="client-tile"><span>Padel X</span></li>
+        <li class="client-tile"><span>Select Automotive</span></li>
+        <li class="client-tile"><span>Mondi Jan Thiel</span></li>
+        <li class="client-tile"><span>Volcano Street Food</span></li>
+        </ul>
+      </div>
     </div>
   </section>
 
@@ -327,61 +344,6 @@
         <div class="card"><h3>Hosting</h3><p>Reliable, cost-effective hosting with room to grow.</p></div>
         <div class="card"><h3>Handover</h3><p>You get the source code and documentation, with no lock-in.</p></div>
       </div>
-    </div>
-  </section>
-
-  <!-- ================= PORTFOLIO ================= -->
-  <section class="section section-alt" id="work">
-    <div class="container">
-      <div class="section-head center">
-        <span class="eyebrow">Recent work</span>
-        <h2 data-content-for="print">A few things we've printed</h2>
-        <h2 data-content-for="dev">A few things we've built</h2>
-      </div>
-
-      <div class="grid grid-3" data-content-for="print">
-        <article class="portfolio-card">
-          <div class="portfolio-thumb grad-a">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-          </div>
-          <div class="portfolio-info"><span class="tag">Prototype</span><h3>Functional bracket redesign</h3><p>PETG, iterated in three revisions for fit.</p></div>
-        </article>
-        <article class="portfolio-card">
-          <div class="portfolio-thumb grad-c">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9 5.5-.8L12 3Z"/></svg>
-          </div>
-          <div class="portfolio-info"><span class="tag">Cosplay</span><h3>Costume prop set</h3><p>Multi-part resin print, primed and ready to paint.</p></div>
-        </article>
-        <article class="portfolio-card">
-          <div class="portfolio-thumb grad-b">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-          </div>
-          <div class="portfolio-info"><span class="tag">Batch order</span><h3>120x display clips</h3><p>PLA, single color, produced for a local retailer.</p></div>
-        </article>
-      </div>
-
-      <div class="grid grid-3" data-content-for="dev">
-        <article class="portfolio-card">
-          <div class="portfolio-thumb grad-a">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/></svg>
-          </div>
-          <div class="portfolio-info"><span class="tag">Web app</span><h3>Volcano Street Food ordering platform</h3><p>Ordering &amp; management system built for a restaurant client.</p></div>
-        </article>
-        <article class="portfolio-card">
-          <div class="portfolio-thumb grad-c">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18Z"/></svg>
-          </div>
-          <div class="portfolio-info"><span class="tag">Website</span><h3>Business marketing site</h3><p>This site, built, styled and deployed end to end.</p></div>
-        </article>
-        <article class="portfolio-card">
-          <div class="portfolio-thumb grad-b">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg>
-          </div>
-          <div class="portfolio-info"><span class="tag">Tooling</span><h3>Batch print workflow</h3><p>Internal workflow &amp; AMS slot mapping across the print queue.</p></div>
-        </article>
-      </div>
-
-      <p class="portfolio-note">📸 Sample cards for now. Swap these for real photos of finished prints and shipped projects in <code>index.html</code> under <code>#work</code>.</p>
     </div>
   </section>
 
@@ -614,6 +576,13 @@
           <a href="#quote" class="btn btn-primary" data-content-for="dev">Start a project</a>
           <a href="#contact" class="btn btn-outline">Contact us</a>
         </div>
+        <div class="cta-social">
+          <p>New prints go up on Instagram first, from first layer to finished piece.</p>
+          <a class="btn btn-instagram" data-cfg-instagram href="#" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.4" cy="6.6" r="1.1" fill="currentColor" stroke="none"/></svg>
+            See more of our work on Instagram
+          </a>
+        </div>
       </div>
     </div>
   </section>
@@ -657,6 +626,10 @@
           <div class="icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.33 4.95L2 22l5.28-1.38a9.87 9.87 0 0 0 4.76 1.21h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Z"/></svg></div>
           <div><h3>WhatsApp</h3><p><span data-cfg-whatsapp-display>Add your number in js/config.js</span></p></div>
         </div>
+        <div class="contact-item" data-cfg-instagram-item>
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.4" cy="6.6" r="1.1" fill="currentColor" stroke="none"/></svg></div>
+          <div><h3>Instagram</h3><p><a data-cfg-instagram href="#" target="_blank" rel="noopener"><span data-cfg-instagram-display>@a3dprinting</span></a></p></div>
+        </div>
         <div class="contact-item">
           <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg></div>
           <div><h3>Location</h3><p data-cfg-address>Curaçao</p></div>
@@ -680,12 +653,17 @@
       </div>
       <ul class="footer-links">
         <li><a href="#services">Services</a></li>
-        <li><a href="#work">Work</a></li>
         <li><a href="prices.html">Prices</a></li>
         <li><a href="#quote">Quote</a></li>
         <li><a href="#about">About</a></li>
         <li><a href="#contact">Contact</a></li>
       </ul>
+    </div>
+    <div class="footer-social">
+      <a data-cfg-instagram href="#" target="_blank" rel="noopener" aria-label="A3D Printing on Instagram">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.4" cy="6.6" r="1.1" fill="currentColor" stroke="none"/></svg>
+        <span data-cfg-instagram-display>@a3dprinting</span>
+      </a>
     </div>
     <p class="footer-note">© <span id="year"></span> A3D Printing. Printing the Future. Based in Curaçao.</p>
   </div>
