@@ -107,6 +107,8 @@ export const ADMIN_HTML = String.raw`<!doctype html>
   button.small { padding:4px 10px; font-size:13px; }
   #view .card + .card { margin-top:16px; }
   .form label { display:block; margin:10px 0; font-size:13px; color:var(--ink-soft); }
+  .form label.check { display:flex; align-items:center; gap:8px; margin-top:14px; }
+  .form label.check input { display:inline-block; width:auto; margin:0; }
   .form input { display:block; width:100%; max-width:520px; margin-top:4px; padding:9px 11px;
     border-radius:9px; border:1px solid var(--border); background:var(--paper); color:var(--ink); font-size:14px; }
 </style>
@@ -309,6 +311,14 @@ function orderDetail(id) {
           html += '<button onclick="markPaid(' + qt.id + ',' + o.id + ')">Mark paid by hand</button>';
         }
         html += '</div>';
+        if (qt.qbo_estimate_no || qt.qbo_invoice_no) {
+          html += '<div class="muted">QuickBooks: quotation ' + esc(qt.qbo_estimate_no || '-') +
+            (qt.qbo_invoice_no ? ', invoice ' + esc(qt.qbo_invoice_no) + ' (paid)' : '') + '</div>';
+        }
+        if (qt.qbo_error) {
+          html += '<div class="muted" style="color:var(--warn)">QuickBooks did not accept this one: ' +
+            esc(qt.qbo_error) + '</div>';
+        }
         if (d.gmail === false) {
           html += '<div class="muted">Email is not connected yet, so Send will hand you the payment link instead.</div>';
         }
@@ -535,6 +545,7 @@ function settings() {
   var flash = '';
   var q = location.hash.split('?')[1] || '';
   if (q.indexOf('connected=gmail') !== -1) flash = '<div class="flash ok">Gmail is connected. Send yourself a test below.</div>';
+  if (q.indexOf('connected=quickbooks') !== -1) flash = '<div class="flash ok">QuickBooks is connected.</div>';
   var m = /error=([^&]*)/.exec(q);
   if (m) flash = '<div class="flash">' + esc(decodeURIComponent(m[1])) + '</div>';
 
@@ -553,13 +564,38 @@ function settings() {
         '<ol class="steps">' +
         '<li>Open <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud credentials</a> and create an OAuth client of type <b>Web application</b>.</li>' +
         '<li>Add this exact redirect URI to it:<br><code class="copy" id="redir">' + esc(redirect) + '</code> ' +
-        '<button class="ghost small" onclick="copyRedirect()">Copy</button></li>' +
+        '<button class="ghost small" onclick="copyText('redir')">Copy</button></li>' +
         '<li>Paste the client id and secret it gives you here, then press Connect.</li>' +
         '</ol>' +
         '<div class="form"><label>Client id<input id="gcid" placeholder="....apps.googleusercontent.com" autocomplete="off"></label>' +
         '<label>Client secret<input id="gcs" type="password" placeholder="GOCSPX-..." autocomplete="off"></label></div>' +
         '<p><button class="primary" onclick="gmailConnect()">Save and connect</button></p>';
       if (g.hasApp) html += '<p class="muted">A client id is already saved. <a href="/api/admin/gmail/start">Approve it with Google</a> if you did not finish last time.</p>';
+    }
+    html += '</div>';
+
+    var qb = me.qbo || {};
+    html += '<div class="card"><h2>Accounting</h2>';
+    if (qb.connected) {
+      html += '<p>Connected to <b>' + esc(qb.company || 'QuickBooks') + '</b>' +
+        (qb.currency ? ', books in ' + esc(qb.currency) : '') +
+        (qb.sandbox ? ' <span style="color:var(--warn)">(sandbox company, not your real books)</span>' : '') + '.</p>' +
+        '<p class="muted">Building a quote creates the estimate in QuickBooks and attaches its PDF to the email. ' +
+        'When the payment lands, that estimate becomes an invoice with the payment recorded against it.</p>' +
+        '<p><button class="ghost" onclick="qboDisconnect()">Disconnect</button></p>';
+    } else {
+      html += '<p class="muted">Not connected. Quotes and payments still work, they just do not reach your books by themselves.</p>' +
+        '<ol class="steps">' +
+        '<li>Open <a href="https://developer.intuit.com/app/developer/dashboard" target="_blank" rel="noopener">the Intuit developer dashboard</a> and create an app with the <b>Accounting</b> scope.</li>' +
+        '<li>Add this exact redirect URI to it:<br><code class="copy" id="qredir">' + esc(location.origin + '/api/admin/qbo/callback') + '</code> ' +
+        '<button class="ghost small" onclick="copyText(\'qredir\')">Copy</button></li>' +
+        '<li>Paste the client id and secret here, then press Connect and pick your company.</li>' +
+        '</ol>' +
+        '<div class="form"><label>Client id<input id="qcid" autocomplete="off"></label>' +
+        '<label>Client secret<input id="qcs" type="password" autocomplete="off"></label>' +
+        '<label class="check"><input type="checkbox" id="qsand"> These are sandbox keys, not production</label></div>' +
+        '<p><button class="primary" onclick="qboConnect()">Save and connect</button></p>';
+      if (qb.hasApp) html += '<p class="muted">Keys are already saved. <a href="/api/admin/qbo/start">Pick your company</a> if you did not finish last time.</p>';
     }
     html += '</div>';
 
@@ -573,9 +609,25 @@ function settings() {
   }).catch(showError);
 }
 
-function copyRedirect() {
-  var el = document.getElementById('redir');
+function copyText(id) {
+  var el = document.getElementById(id);
   navigator.clipboard.writeText(el.textContent).then(function () { el.classList.add('copied'); });
+}
+
+function qboConnect() {
+  var id = document.getElementById('qcid').value.trim();
+  var secret = document.getElementById('qcs').value.trim();
+  if (!id || !secret) return alert('Both fields are needed.');
+  api('/qbo/app', {
+    method: 'POST',
+    body: JSON.stringify({ client_id: id, client_secret: secret, sandbox: document.getElementById('qsand').checked }),
+  }).then(function () { location.href = '/api/admin/qbo/start'; })
+    .catch(function (e) { alert(e.message); });
+}
+
+function qboDisconnect() {
+  if (!confirm('Disconnect QuickBooks? Estimates and invoices will stop being created.')) return;
+  api('/qbo/disconnect', { method: 'POST' }).then(settings).catch(showError);
 }
 
 function gmailConnect() {
