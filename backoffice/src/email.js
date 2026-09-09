@@ -1,44 +1,28 @@
-// Outbound email.
+// Outbound alerts to Adrian.
 //
-// Phase 1 only needs one thing: tell Adrian a request came in. That goes
-// through Cloudflare's send_email binding, which can deliver to a verified
-// destination address on the zone. If the binding is missing the order is
-// still saved and the failure is logged, never thrown: a broken mail setup
-// must not lose a customer's request.
-//
-// Phase 2 replaces this with the Gmail API so quotes go out from
-// a3dprinting.cw@gmail.com and land in the real Sent folder.
+// Sent through the same Gmail connection the quotes use, so the domain's MX
+// records never have to change and there is one thing to keep working instead
+// of two. Failure is logged, never thrown: a broken mail setup must not lose
+// a customer's request.
 
-function mime({ from, to, subject, text }) {
-  const lines = [
-    `From: ${from}`,
-    `To: ${to}`,
-    `Subject: ${subject}`,
-    'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset=utf-8',
-    '',
-    text,
-  ];
-  return lines.join('\r\n');
-}
+import { sendMail, isConfigured } from './gmail.js';
 
 export async function alertAdmin(env, subject, text) {
-  if (!env.ALERTS) {
-    console.log('email: no ALERTS binding, skipping', subject);
+  if (!isConfigured(env)) {
+    console.log('email: gmail not connected, skipping alert:', subject);
     return false;
   }
   try {
-    const { EmailMessage } = await import('cloudflare:email');
-    const from = `noreply@${new URL(env.PUBLIC_ORIGIN).hostname}`;
-    const msg = new EmailMessage(
-      from,
-      env.ADMIN_EMAIL,
-      mime({ from, to: env.ADMIN_EMAIL, subject, text }),
-    );
-    await env.ALERTS.send(msg);
+    await sendMail(env, {
+      to: env.ADMIN_EMAIL,
+      subject,
+      text,
+      html: '<pre style="font:14px/1.5 ui-monospace,monospace">' +
+        text.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</pre>',
+    });
     return true;
   } catch (err) {
-    console.log('email: send failed', err.message);
+    console.log('email: alert failed', err.message);
     return false;
   }
 }

@@ -258,14 +258,37 @@ function orderDetail(id) {
       html += '<p class="muted">No files uploaded with this request.</p>';
     }
 
-    html += '<h2>Quote</h2>';
+    html += '<h2>Quotes</h2>';
     if (d.quotes.length) {
       d.quotes.forEach(function (qt) {
-        html += '<div class="card" style="margin-bottom:10px"><b>' + money(qt.total_cents) + '</b> ' + pill(qt.status);
+        var qlines = (d.lines || []).filter(function (l) { return l.quote_id === qt.id; });
+        html += '<div class="card" style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:center">' +
+          '<b style="font-size:19px">' + money(qt.total_cents) + '</b> ' + pill(qt.status) + '</div>';
+        if (qlines.length) {
+          html += '<table style="margin-top:10px">';
+          qlines.forEach(function (l) {
+            html += '<tr><td>' + l.qty + ' &times; ' + esc(l.description) + '</td><td class="right">' + money(l.line_cents) + '</td></tr>';
+          });
+          html += '</table>';
+        }
         if (qt.sentoo_url) {
-          html += '<div class="muted" style="margin-top:6px">Payment link: <a href="' + esc(qt.sentoo_url) +
+          html += '<div class="muted" style="margin-top:8px">Pay link: <a href="' + esc(qt.sentoo_url) +
             '" target="_blank" rel="noopener">' + esc(qt.sentoo_url) + '</a>' +
             (qt.sentoo_status === 'mock' ? ' <em>(sandbox placeholder)</em>' : '') + '</div>';
+        }
+        if (qt.paid_at) {
+          html += '<div class="muted" style="margin-top:6px;color:var(--ok)">Paid ' + ago(qt.paid_at) + '</div>';
+        }
+        html += '<div class="bar" style="margin-top:12px">';
+        if (qt.status !== 'paid') {
+          html += '<button class="primary" onclick="sendQuote(' + qt.id + ',' + o.id + ')">' +
+            (qt.status === 'sent' ? 'Send again' : 'Send to customer') + '</button>';
+          if (qt.sentoo_uid) html += '<button onclick="checkPayment(' + qt.id + ',' + o.id + ')">Check payment</button>';
+          html += '<button onclick="markPaid(' + qt.id + ',' + o.id + ')">Mark paid by hand</button>';
+        }
+        html += '</div>';
+        if (d.gmail === false) {
+          html += '<div class="muted">Email is not connected yet, so Send will hand you the payment link instead.</div>';
         }
         html += '</div>';
       });
@@ -342,6 +365,23 @@ function saveQuote(id) {
       alert(msg);
       orderDetail(id);
     }).catch(function (e) { alert(e.message); });
+}
+function sendQuote(quoteId, orderId) {
+  if (!confirm('Email this quote to the customer with the payment link?')) return;
+  api('/quotes/' + quoteId + '/send', { method: 'POST' })
+    .then(function (r) { alert('Sent. Payment link: ' + r.payUrl); orderDetail(orderId); })
+    .catch(function (e) { alert(e.message); });
+}
+function checkPayment(quoteId, orderId) {
+  api('/quotes/' + quoteId + '/check', { method: 'POST' })
+    .then(function (r) { alert('Sentoo says: ' + r.status + (r.paid ? '. Marked paid.' : '')); orderDetail(orderId); })
+    .catch(function (e) { alert(e.message); });
+}
+function markPaid(quoteId, orderId) {
+  var how = prompt('How was it paid?', 'Paid in cash at the shop');
+  if (how === null) return;
+  api('/quotes/' + quoteId + '/paid', { method: 'POST', body: JSON.stringify({ how: how }) })
+    .then(function () { orderDetail(orderId); }).catch(showError);
 }
 function setStatus(id, st) {
   api('/orders/' + id, { method: 'POST', body: JSON.stringify({ status: st }) })

@@ -1,6 +1,7 @@
 import { identify } from './access.js';
 import { alertAdmin, newOrderAlert } from './email.js';
 import { createPayment, fetchStatus, isMock } from './sentoo.js';
+import { sendMail, quoteEmail, isConfigured as gmailReady } from './gmail.js';
 import { ADMIN_HTML } from './admin-html.js';
 
 const ALLOWED_EXT = ['stl', 'obj', '3mf', 'step', 'stp', 'png', 'jpg', 'jpeg', 'pdf', 'webp'];
@@ -141,6 +142,26 @@ async function handleBeacon(request, env) {
   return json({ ok: true });
 }
 
+
+// Applies a Sentoo status to a quote exactly once. Used by both the webhook
+// and the safety-net poller, so a missed callback can never leave an order
+// sitting unpaid in the back office while the money is in the bank.
+async function applyPaymentStatus(env, quote, status) {
+  if (quote.sentoo_status === status) return false;
+  const paid = status === 'success' || status === 'paid';
+  await env.DB.prepare(
+    `UPDATE quotes SET sentoo_status = ?, status = CASE WHEN ? THEN 'paid' ELSE status END,
+     paid_at = CASE WHEN ? THEN datetime('now') ELSE paid_at END WHERE id = ?`,
+  ).bind(status, paid ? 1 : 0, paid ? 1 : 0, quote.id).run();
+  if (paid) {
+    await env.DB.prepare("UPDATE orders SET status = 'paid', updated_at = datetime('now') WHERE id = ?")
+      .bind(quote.order_id).run();
+  }
+  await env.DB.prepare('INSERT INTO order_events (order_id, kind, detail) VALUES (?, ?, ?)')
+    .bind(quote.order_id, 'payment', 'Sentoo status: ' + status).run();
+  return paid;
+}
+
 async function handleSentooWebhook(request, env) {
   // Sentoo sends the transaction id and nothing else. Fetch the real status,
   // apply it once, and always answer 200 so they stop retrying.
@@ -165,21 +186,7 @@ async function handleSentooWebhook(request, env) {
     return json({ error: err.message }, 500);
   }
 
-  if (quote.sentoo_status === status) return json({ ok: true, note: 'already applied' });
-
-  const paid = status === 'success' || status === 'paid';
-  await env.DB.prepare(
-    `UPDATE quotes SET sentoo_status = ?, status = CASE WHEN ? THEN 'paid' ELSE status END,
-     paid_at = CASE WHEN ? THEN datetime('now') ELSE paid_at END WHERE id = ?`,
-  ).bind(status, paid ? 1 : 0, paid ? 1 : 0, quote.id).run();
-
-  if (paid) {
-    await env.DB.prepare("UPDATE orders SET status = 'paid', updated_at = datetime('now') WHERE id = ?")
-      .bind(quote.order_id).run();
-  }
-  await env.DB.prepare('INSERT INTO order_events (order_id, kind, detail) VALUES (?, ?, ?)')
-    .bind(quote.order_id, 'payment', `Sentoo status: ${status}`).run();
-
+  await applyPaymentStatus(env, quote, status);
   return json({ ok: true, status });
 }
 
@@ -262,7 +269,13 @@ export async function adminRoutes(request, env, url, email) {
     const history = await env.DB.prepare(
       'SELECT id, ref, status, created_at FROM orders WHERE customer_id = ? AND id != ? ORDER BY id DESC LIMIT 10',
     ).bind(order.customer_id, id).all();
-    return json({ order, files: files.results, events: events.results, quotes: quotes.results, history: history.results });
+    const lines = quotes.results.length
+      ? (await env.DB.prepare('SELECT * FROM quote_lines WHERE quote_id IN (SELECT id FROM quotes WHERE order_id = ?) ORDER BY quote_id, position').bind(id).all()).results
+      : [];
+    return json({
+      order, files: files.results, events: events.results, quotes: quotes.results,
+      lines, history: history.results, gmail: gmailReady(env),
+    });
   }
 
   if (orderMatch && method === 'POST') {
@@ -377,12 +390,123 @@ export async function adminRoutes(request, env, url, email) {
     return json({ ok: true, quote, payment });
   }
 
+  // --- send the quote to the customer -----------------------------------
+  const sendMatch = p.match(/^\/quotes\/(\d+)\/send$/);
+  if (sendMatch && method === 'POST') {
+    const quoteId = Number(sendMatch[1]);
+    const quote = await env.DB.prepare('SELECT * FROM quotes WHERE id = ?').bind(quoteId).first();
+    if (!quote) return bad('No such quote', 404);
+    const order = await env.DB.prepare(
+      `SELECT o.*, c.name customer_name, c.email customer_email FROM orders o
+       JOIN customers c ON c.id = o.customer_id WHERE o.id = ?`,
+    ).bind(quote.order_id).first();
+    const lines = (await env.DB.prepare('SELECT * FROM quote_lines WHERE quote_id = ? ORDER BY position').bind(quoteId).all()).results;
+
+    // The payment link is always built from the quote total, so the amount
+    // the customer pays cannot drift from the amount that was quoted.
+    let payUrl = quote.sentoo_url;
+    if (!payUrl) {
+      try {
+        const payment = await createPayment(env, {
+          amountCents: quote.total_cents,
+          description: env.BUSINESS_NAME + ' ' + order.ref,
+          returnUrl: env.PUBLIC_ORIGIN + '/thanks?status=',
+          customerRef: order.ref,
+          expiresAt: quote.valid_until ? String(quote.valid_until).replace('Z', '+00:00') : undefined,
+        });
+        payUrl = payment.url;
+        await env.DB.prepare('UPDATE quotes SET sentoo_uid = ?, sentoo_url = ?, sentoo_status = ? WHERE id = ?')
+          .bind(payment.uid, payment.url, payment.mock ? 'mock' : 'issued', quoteId).run();
+      } catch (err) {
+        return bad('The payment link could not be created: ' + err.message, 502);
+      }
+    }
+
+    if (!gmailReady(env)) {
+      return bad('Email is not connected yet. The payment link is ready: ' + payUrl, 503);
+    }
+
+    const body = quoteEmail({
+      business: env.BUSINESS_NAME, order, customer: { name: order.customer_name }, quote,
+      lines, payUrl, currency: quote.currency || env.CURRENCY || 'XCG',
+    });
+    try {
+      await sendMail(env, {
+        to: order.customer_email,
+        subject: env.BUSINESS_NAME + ' quote ' + order.ref,
+        text: body.text,
+        html: body.html,
+      });
+    } catch (err) {
+      return bad('The quote could not be emailed: ' + err.message, 502);
+    }
+
+    await env.DB.prepare("UPDATE quotes SET status = 'sent', sent_at = datetime('now') WHERE id = ?").bind(quoteId).run();
+    await env.DB.prepare('INSERT INTO order_events (order_id, kind, detail) VALUES (?, ?, ?)')
+      .bind(order.id, 'email', 'Quote emailed to ' + order.customer_email).run();
+    await env.DB.prepare("UPDATE orders SET status = 'quoted', updated_at = datetime('now') WHERE id = ?")
+      .bind(order.id).run();
+    return json({ ok: true, payUrl });
+  }
+
+  // --- mark a quote paid by hand, for cash and bank transfers ------------
+  const paidMatch = p.match(/^\/quotes\/(\d+)\/paid$/);
+  if (paidMatch && method === 'POST') {
+    const quoteId = Number(paidMatch[1]);
+    const quote = await env.DB.prepare('SELECT * FROM quotes WHERE id = ?').bind(quoteId).first();
+    if (!quote) return bad('No such quote', 404);
+    const how = (await request.json().catch(() => ({}))).how || 'marked paid by hand';
+    await env.DB.prepare("UPDATE quotes SET status = 'paid', paid_at = datetime('now') WHERE id = ?").bind(quoteId).run();
+    await env.DB.prepare("UPDATE orders SET status = 'paid', updated_at = datetime('now') WHERE id = ?").bind(quote.order_id).run();
+    await env.DB.prepare('INSERT INTO order_events (order_id, kind, detail) VALUES (?, ?, ?)')
+      .bind(quote.order_id, 'payment', how).run();
+    return json({ ok: true });
+  }
+
+  // --- ask Sentoo right now instead of waiting for the callback ---------
+  const checkMatch = p.match(/^\/quotes\/(\d+)\/check$/);
+  if (checkMatch && method === 'POST') {
+    const quote = await env.DB.prepare('SELECT * FROM quotes WHERE id = ?').bind(Number(checkMatch[1])).first();
+    if (!quote || !quote.sentoo_uid) return bad('No payment to check', 404);
+    try {
+      const { status } = await fetchStatus(env, quote.sentoo_uid);
+      const paid = await applyPaymentStatus(env, quote, status);
+      return json({ ok: true, status, paid });
+    } catch (err) {
+      return bad('Sentoo did not answer: ' + err.message, 502);
+    }
+  }
+
   return bad('Unknown admin route', 404);
 }
 
 // -------------------------------------------------------------------- router
 
 export default {
+  // Runs on a cron. Sentoo's own docs warn that webhooks can be late, out of
+  // order, or missing, so every few minutes we ask them about the payments we
+  // are still waiting on. Whichever arrives first wins; applying a status
+  // twice is a no-op.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil((async () => {
+      const pending = await env.DB.prepare(
+        `SELECT * FROM quotes
+         WHERE sentoo_uid IS NOT NULL AND status != 'paid'
+           AND (sentoo_status IS NULL OR sentoo_status NOT IN ('success', 'paid', 'expired', 'cancelled'))
+           AND created_at >= datetime('now', '-30 days')
+         LIMIT 25`,
+      ).all();
+      for (const quote of pending.results) {
+        try {
+          const { status } = await fetchStatus(env, quote.sentoo_uid);
+          await applyPaymentStatus(env, quote, status);
+        } catch (err) {
+          console.log('poll failed for quote', quote.id, err.message);
+        }
+      }
+    })());
+  },
+
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
@@ -420,6 +544,9 @@ export default {
         return adminRoutes(request, env, url, who);
       }
 
+      if (path === '/' || path === '') {
+        return Response.redirect(new URL('/admin', request.url).toString(), 302);
+      }
       return new Response('Not found', { status: 404 });
     } catch (err) {
       console.log('worker error', err.stack || err.message);
