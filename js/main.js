@@ -154,6 +154,22 @@
       }
     }
 
+    var igUrl = (cfg.instagramUrl || "").trim();
+    var igHandle = (cfg.instagramHandle || "").trim();
+    document.querySelectorAll("[data-cfg-instagram]").forEach(function (a) {
+      if (igUrl) {
+        a.setAttribute("href", igUrl);
+      } else {
+        a.style.display = "none";
+      }
+    });
+    document.querySelectorAll("[data-cfg-instagram-item]").forEach(function (el) {
+      if (!igUrl) el.style.display = "none";
+    });
+    document.querySelectorAll("[data-cfg-instagram-display]").forEach(function (el) {
+      if (igHandle) el.textContent = igHandle;
+    });
+
     var needsSetup = !cfg.whatsappNumber || !cfg.formspreeEndpoint;
     document.querySelectorAll(".setup-banner").forEach(function (el) {
       el.style.display = needsSetup ? "flex" : "none";
