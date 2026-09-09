@@ -231,6 +231,14 @@ await t('disconnect clears every trace', async () => {
   assert(me.gmail.connected === false && me.gmail.hasApp === false, 'still looks connected');
 });
 
+await t('the order detail carries the price list and tax rate for the builder', async () => {
+  const j = await (await A('/orders/1')).json();
+  assert(Array.isArray(j.prices), 'no price list in the payload');
+  assert(j.prices.length === 8, 'expected 8 active price rows, got ' + j.prices.length);
+  assert(j.prices[0].name && typeof j.prices[0].unit_cents !== 'undefined', 'price rows need a name and a price');
+  assert(typeof j.taxPct === 'number', 'tax rate should be a number, got ' + typeof j.taxPct);
+});
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 await mf.dispose();
 process.exit(fail ? 1 : 0);
