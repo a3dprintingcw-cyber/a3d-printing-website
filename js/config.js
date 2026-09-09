@@ -14,7 +14,13 @@ window.A3D_CONFIG = {
   // Contact email shown on the site.
   contactEmail: "a3dprinting.cw@gmail.com",
 
-  // Formspree endpoint for the quote/inquiry forms.
+  // Our own back office (Cloudflare Worker). While this is set the quote forms
+  // post here, files land in our own storage and every request shows up in the
+  // back office at https://app.a3dprinting.com/admin. Blank it out and the site
+  // falls straight back to Formspree below.
+  apiBase: "https://app.a3dprinting.com/api",
+
+  // Formspree endpoint, kept only as a fallback for the line above.
   // 1. Go to https://formspree.io and create a free account (takes ~2 min).
   // 2. Create a new form, copy the endpoint it gives you
   //    (looks like "https://formspree.io/f/abcdwxyz").
