@@ -1,7 +1,8 @@
 import { identify } from './access.js';
 import { alertAdmin, newOrderAlert } from './email.js';
 import { createPayment, fetchStatus, isMock } from './sentoo.js';
-import { sendMail, quoteEmail, isConfigured as gmailReady } from './gmail.js';
+import { sendMail, quoteEmail, isConfigured as gmailReady, gmailConfig, exchangeCode, GMAIL_SCOPES } from './gmail.js';
+import { getSetting, setSetting } from './settings.js';
 import { ADMIN_HTML } from './admin-html.js';
 
 const ALLOWED_EXT = ['stl', 'obj', '3mf', 'step', 'stp', 'png', 'jpg', 'jpeg', 'pdf', 'webp'];
@@ -196,7 +197,97 @@ export async function adminRoutes(request, env, url, email) {
   const p = url.pathname.replace(/^\/api\/admin/, '');
   const method = request.method;
 
-  if (p === '/me') return json({ email, sentoo: isMock(env) ? 'mock' : 'live' });
+  if (p === '/me') {
+    const g = await gmailConfig(env);
+    return json({
+      email,
+      sentoo: isMock(env) ? 'mock' : 'live',
+      gmail: { connected: Boolean(g.clientId && g.clientSecret && g.refreshToken), hasApp: Boolean(g.clientId && g.clientSecret), account: g.account },
+    });
+  }
+
+  // --- connecting Gmail, all of it from inside the back office ----------
+  // The client id and secret are written straight to settings and never read
+  // back out. The consent step happens in Adrian's own browser, and Google
+  // hands the refresh token to this Worker, so nothing sensitive is ever shown
+  // on screen or pasted into a chat.
+
+  if (p === '/gmail/app' && method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    const id = String(body.client_id || '').trim();
+    const secret = String(body.client_secret || '').trim();
+    if (!id || !secret) return bad('Both the client id and the client secret are needed.');
+    if (!/\.apps\.googleusercontent\.com$/.test(id)) {
+      return bad('That does not look like a Google client id. It ends in .apps.googleusercontent.com');
+    }
+    await setSetting(env, 'gmail_client_id', id);
+    await setSetting(env, 'gmail_client_secret', secret);
+    return json({ ok: true, redirectUri: url.origin + '/api/admin/gmail/callback' });
+  }
+
+  if (p === '/gmail/start' && method === 'GET') {
+    const conf = await gmailConfig(env);
+    if (!conf.clientId || !conf.clientSecret) return bad('Save the client id and secret first.');
+    const state = crypto.randomUUID();
+    await setSetting(env, 'gmail_oauth_state', state + '|' + Date.now());
+    const auth = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    auth.searchParams.set('client_id', conf.clientId);
+    auth.searchParams.set('redirect_uri', url.origin + '/api/admin/gmail/callback');
+    auth.searchParams.set('response_type', 'code');
+    auth.searchParams.set('scope', GMAIL_SCOPES);
+    auth.searchParams.set('access_type', 'offline');
+    auth.searchParams.set('prompt', 'consent');
+    auth.searchParams.set('login_hint', env.ADMIN_EMAIL || '');
+    auth.searchParams.set('state', state);
+    return Response.redirect(auth.toString(), 302);
+  }
+
+  if (p === '/gmail/callback' && method === 'GET') {
+    const done = (msg, ok) => Response.redirect(url.origin + '/admin#/settings?' +
+      (ok ? 'connected=gmail' : 'error=' + encodeURIComponent(msg)), 302);
+    const err = url.searchParams.get('error');
+    if (err) return done(err === 'access_denied' ? 'You cancelled the Google approval.' : err, false);
+    const code = url.searchParams.get('code');
+    const state = url.searchParams.get('state');
+    const saved = await getSetting(env, 'gmail_oauth_state');
+    await setSetting(env, 'gmail_oauth_state', null);
+    if (!code || !saved || saved.split('|')[0] !== state) return done('That approval link was stale. Try Connect again.', false);
+    if (Date.now() - Number(saved.split('|')[1] || 0) > 15 * 60 * 1000) return done('That approval took too long. Try Connect again.', false);
+    const conf = await gmailConfig(env);
+    try {
+      const res = await exchangeCode(conf.clientId, conf.clientSecret, code, url.origin + '/api/admin/gmail/callback');
+      await setSetting(env, 'gmail_refresh_token', res.refreshToken);
+      if (res.account) await setSetting(env, 'gmail_email', res.account);
+    } catch (e) {
+      return done(e.message, false);
+    }
+    return done('', true);
+  }
+
+  if (p === '/gmail/test' && method === 'POST') {
+    if (!(await gmailReady(env))) return bad('Gmail is not connected yet.');
+    const conf = await gmailConfig(env);
+    try {
+      await sendMail(env, {
+        to: env.ADMIN_EMAIL,
+        subject: env.BUSINESS_NAME + ' back office: mail is working',
+        text: 'This is the test message from the back office. Quotes will go out from ' +
+          (conf.account || env.ADMIN_EMAIL) + ' and land in that Sent folder.',
+        html: '<p>This is the test message from the back office.</p><p>Quotes will go out from <b>' +
+          (conf.account || env.ADMIN_EMAIL) + '</b> and land in that Sent folder.</p>',
+      });
+    } catch (e) {
+      return bad('Google refused the send: ' + e.message, 502);
+    }
+    return json({ ok: true, sentTo: env.ADMIN_EMAIL });
+  }
+
+  if (p === '/gmail/disconnect' && method === 'POST') {
+    for (const k of ['gmail_client_id', 'gmail_client_secret', 'gmail_refresh_token', 'gmail_email', 'gmail_oauth_state']) {
+      await setSetting(env, k, null);
+    }
+    return json({ ok: true });
+  }
 
   if (p === '/stats' && method === 'GET') {
     const since = new Date(Date.now() - 29 * 864e5).toISOString().slice(0, 10);
@@ -274,7 +365,7 @@ export async function adminRoutes(request, env, url, email) {
       : [];
     return json({
       order, files: files.results, events: events.results, quotes: quotes.results,
-      lines, history: history.results, gmail: gmailReady(env),
+      lines, history: history.results, gmail: await gmailReady(env),
     });
   }
 
@@ -422,7 +513,7 @@ export async function adminRoutes(request, env, url, email) {
       }
     }
 
-    if (!gmailReady(env)) {
+    if (!(await gmailReady(env))) {
       return bad('Email is not connected yet. The payment link is ready: ' + payUrl, 503);
     }
 
