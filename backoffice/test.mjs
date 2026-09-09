@@ -23,10 +23,15 @@ const mf = new Miniflare({
 });
 
 const db = await mf.getD1Database('DB');
-const sql = fs.readFileSync('/home/claude/backoffice/migrations/0001_init.sql', 'utf8');
-const noComments = sql.split('\n').map(l => l.replace(/--.*$/, '')).join('\n');
-for (const stmt of noComments.split(';').map(s => s.trim()).filter(Boolean)) {
-  await db.exec(stmt.replace(/\s+/g, ' '));
+// Every migration, in order, so the tests run against the same schema the live
+// database has rather than only the first one.
+const migDir = '/home/claude/backoffice/migrations';
+for (const file of fs.readdirSync(migDir).filter(f => f.endsWith('.sql')).sort()) {
+  const sql = fs.readFileSync(migDir + '/' + file, 'utf8')
+    .split('\n').map(l => l.replace(/--.*$/, '')).join('\n');
+  for (const stmt of sql.split(';').map(x => x.trim()).filter(Boolean)) {
+    await db.exec(stmt.replace(/\s+/g, ' '));
+  }
 }
 console.log('schema loaded');
 
