@@ -687,3 +687,113 @@ body.mode-switching [data-content-for] { animation: mode-in .38s cubic-bezier(.2
   .client-tile { font-size: 14px; }
   .client-tile img { height: 24px; }
 }
+
+/* ---------- client band: auto-scrolling logo strip ----------
+   Two identical lists sit side by side inside .client-track; the track
+   slides left by exactly one list plus one gap, so the loop is seamless.
+   Hovering pauses it, and anyone who has asked for reduced motion gets a
+   plain centred row instead. */
+.client-band .container { padding: 0; }
+.client-marquee {
+  position: relative;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+}
+.client-track {
+  display: flex;
+  width: max-content;
+  gap: 64px;
+  animation: client-scroll 34s linear infinite;
+}
+.client-marquee:hover .client-track,
+.client-marquee:focus-within .client-track { animation-play-state: paused; }
+.client-band .client-strip {
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  gap: 64px;
+}
+.client-tile { flex: none; white-space: nowrap; }
+/* Logos render as flat silhouettes so a red logo, a navy one and a pale
+   grey one all carry the same weight in the row. Full colour on hover. */
+.client-tile img {
+  height: 34px;
+  width: auto;
+  opacity: .6;
+  filter: grayscale(1) brightness(0);
+}
+[data-theme="dark"] .client-tile img { filter: brightness(0) invert(1); opacity: .62; }
+.client-tile:hover img,
+[data-theme="dark"] .client-tile:hover img { filter: none; opacity: 1; }
+/* Round or icon-only marks need more height to read at the same size. */
+.client-tile.is-mark img { height: 44px; }
+@media (max-width: 720px) {
+  .client-tile.is-mark img { height: 34px; }
+}
+
+@keyframes client-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(calc(-50% - 32px)); }
+}
+
+@media (max-width: 720px) {
+  .client-track, .client-band .client-strip { gap: 40px; }
+  .client-tile img { height: 26px; }
+  @keyframes client-scroll {
+    from { transform: translateX(0); }
+    to   { transform: translateX(calc(-50% - 20px)); }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .client-marquee { -webkit-mask-image: none; mask-image: none; }
+  .client-track { animation: none; width: auto; flex-wrap: wrap; justify-content: center; }
+  .client-track .client-strip[aria-hidden="true"] { display: none; }
+  .client-band .client-strip { flex-wrap: wrap; justify-content: center; }
+}
+
+/* ---------- Instagram ---------- */
+.ig-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px; border-radius: 999px; flex: none;
+  border: 1px solid var(--border); background: var(--card); color: var(--ink-soft);
+  text-decoration: none;
+  transition: color .2s ease, border-color .2s ease, transform .15s ease;
+}
+.ig-btn svg { width: 19px; height: 19px; }
+.ig-btn:hover { color: #d6249f; border-color: #d6249f; transform: translateY(-1px); }
+
+.btn-instagram {
+  color: #fff;
+  background: linear-gradient(88deg, #f9ce34 2%, #ee2a7b 48%, #6228d7 98%);
+  border-color: transparent;
+}
+.btn-instagram svg { width: 19px; height: 19px; }
+.btn-instagram:hover { filter: brightness(1.06); }
+
+.cta-social {
+  margin-top: 30px; padding-top: 26px;
+  border-top: 1px solid rgba(255,255,255,.22);
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+}
+.cta-social p { margin: 0; font-size: 14.5px; color: rgba(255,255,255,.85); }
+.cta-banner .btn-instagram { color: #fff; }
+
+.footer-social { display: flex; justify-content: center; margin-top: 26px; }
+.footer-social a {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 13.5px; font-weight: 600; color: var(--ink-soft); text-decoration: none;
+}
+.footer-social a svg { width: 17px; height: 17px; }
+.footer-social a:hover { color: #d6249f; }
+.footer-social + .footer-note { margin-top: 14px; }
+
+@media (max-width: 720px) {
+  .ig-btn { width: 34px; height: 34px; }
+  .ig-btn svg { width: 17px; height: 17px; }
+}
+@media (max-width: 560px) {
+  .header-actions .ig-btn { display: none; }
+}
+.mobile-nav a.ig-link { display: inline-flex; align-items: center; gap: 8px; }
+.mobile-nav a.ig-link svg { width: 17px; height: 17px; }
