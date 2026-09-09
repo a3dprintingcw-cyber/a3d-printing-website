@@ -4,14 +4,37 @@
 // Worker secret, and from then on every quote goes out from his real address
 // and lands in his real Sent folder. Nothing is stored by us except the token.
 
-async function accessToken(env) {
+import { getSettings } from './settings.js';
+
+export const GMAIL_SCOPES = 'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email';
+const TOKEN_URL = 'https://oauth2.googleapis.com/token';
+
+/**
+ * Where the connection details come from. The back office writes them to the
+ * settings table when Adrian connects Gmail; Worker secrets still win if they
+ * are set, so a deploy can override a bad row without a database edit.
+ */
+export async function gmailConfig(env) {
+  const s = await getSettings(env, ['gmail_client_id', 'gmail_client_secret', 'gmail_refresh_token', 'gmail_email'])
+    .catch(() => ({}));
+  return {
+    clientId: env.GMAIL_CLIENT_ID || s.gmail_client_id || '',
+    clientSecret: env.GMAIL_CLIENT_SECRET || s.gmail_client_secret || '',
+    refreshToken: env.GMAIL_REFRESH_TOKEN || s.gmail_refresh_token || '',
+    account: s.gmail_email || env.ADMIN_EMAIL || '',
+  };
+}
+
+/** Trades the long lived refresh token for an hour long access token. */
+export async function accessToken(env, conf) {
+  const c = conf || (await gmailConfig(env));
   const body = new URLSearchParams({
-    client_id: env.GMAIL_CLIENT_ID,
-    client_secret: env.GMAIL_CLIENT_SECRET,
-    refresh_token: env.GMAIL_REFRESH_TOKEN,
+    client_id: c.clientId,
+    client_secret: c.clientSecret,
+    refresh_token: c.refreshToken,
     grant_type: 'refresh_token',
   });
-  const res = await fetch('https://oauth2.googleapis.com/token', {
+  const res = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body,
@@ -23,8 +46,38 @@ async function accessToken(env) {
   return json.access_token;
 }
 
-export function isConfigured(env) {
-  return Boolean(env.GMAIL_CLIENT_ID && env.GMAIL_CLIENT_SECRET && env.GMAIL_REFRESH_TOKEN);
+/**
+ * Swaps the one time code from the consent screen for a refresh token.
+ * Returns the refresh token and, when Google tells us, which account approved.
+ */
+export async function exchangeCode(clientId, clientSecret, code, redirectUri) {
+  const res = await fetch(TOKEN_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      code,
+      redirect_uri: redirectUri,
+      grant_type: 'authorization_code',
+    }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error_description || json.error || ('token exchange failed, ' + res.status));
+  if (!json.refresh_token) {
+    throw new Error('Google did not send a refresh token. Remove the old access for this app at myaccount.google.com/permissions and connect again.');
+  }
+  let account = '';
+  try {
+    const claims = JSON.parse(atob(String(json.id_token).split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    account = claims.email || '';
+  } catch (e) { /* the address is a nicety, not a requirement */ }
+  return { refreshToken: json.refresh_token, account };
+}
+
+export async function isConfigured(env) {
+  const c = await gmailConfig(env);
+  return Boolean(c.clientId && c.clientSecret && c.refreshToken);
 }
 
 // Base64url without padding, working on bytes so accents survive.
@@ -44,9 +97,10 @@ function encodeHeader(text) {
  * Sends a multipart alternative message and returns the Gmail message id.
  */
 export async function sendMail(env, { to, subject, text, html, replyTo }) {
-  if (!isConfigured(env)) throw new Error('gmail: not connected yet');
-  const token = await accessToken(env);
-  const from = env.ADMIN_EMAIL;
+  const conf = await gmailConfig(env);
+  if (!conf.clientId || !conf.clientSecret || !conf.refreshToken) throw new Error('gmail: not connected yet');
+  const token = await accessToken(env, conf);
+  const from = conf.account || env.ADMIN_EMAIL;
   const boundary = 'a3d' + Math.random().toString(16).slice(2);
 
   const raw = [
