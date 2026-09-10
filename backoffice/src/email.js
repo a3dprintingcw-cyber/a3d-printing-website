@@ -29,8 +29,9 @@ export async function alertAdmin(env, subject, text) {
 
 export function newOrderAlert(order, customer, files) {
   const lines = [
-    `${order.ref} from ${customer.name}`,
+    `${order.ref} from ${customer.name}${customer.company ? ' (' + customer.company + ')' : ''}`,
     '',
+    customer.company ? `Company:  ${customer.company}` : null,
     `Email:    ${customer.email}`,
     customer.phone ? `Phone:    ${customer.phone}` : null,
     order.mode === 'dev' ? `Project:  ${order.project_type || '-'}` : `Material: ${order.material || '-'}`,
