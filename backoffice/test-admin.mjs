@@ -1,5 +1,7 @@
 import { Miniflare } from 'miniflare';
 import fs from 'node:fs';
+import vm from 'node:vm';
+import { ADMIN_HTML } from './src/admin-html.js';
 
 const bindings = {
   ADMIN_EMAIL: 'a3dprinting.cw@gmail.com', BUSINESS_NAME: 'A3D Printing', CURRENCY: 'XCG',
@@ -301,6 +303,26 @@ await t('quickbooks disconnect clears every trace', async () => {
   await A('/qbo/disconnect', { method: 'POST' });
   const rows = await db.prepare("select key from settings where key like 'qbo_%'").all();
   assert(rows.results.length === 0, 'left behind: ' + rows.results.map(r => r.key).join(','));
+});
+
+// The back office UI is one long template string, so a syntax error inside it
+// sails through every check the module system does and only shows up as a page
+// stuck on "Loading...". Parse the inline script for real, every run.
+await t('the admin page script actually parses', () => {
+  const start = ADMIN_HTML.indexOf('<script>');
+  const end = ADMIN_HTML.lastIndexOf('</script>');
+  assert(start !== -1 && end > start, 'could not find the inline script');
+  const js = ADMIN_HTML.slice(start + 8, end);
+  assert(js.length > 1000, 'inline script looks truncated: ' + js.length + ' bytes');
+  new vm.Script(js, { filename: 'admin-inline.js' });
+});
+
+await t('the admin page has no unclosed tags in the shell', () => {
+  for (const tag of ['html', 'head', 'body', 'style', 'script']) {
+    const open = (ADMIN_HTML.match(new RegExp('<' + tag + '[ >]', 'g')) || []).length;
+    const close = (ADMIN_HTML.match(new RegExp('</' + tag + '>', 'g')) || []).length;
+    assert(open === close, tag + ': ' + open + ' open, ' + close + ' closed');
+  }
 });
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
