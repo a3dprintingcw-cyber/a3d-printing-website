@@ -157,7 +157,10 @@ async function handleQuoteRequest(request, env, ctx) {
   if (!fields.name || !email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     return bad('A name and a valid email address are required.');
   }
-  if (fields.company_website) return json({ ok: true, ref: 'ignored' }); // honeypot
+  // Spam trap. Only the new, meaningless field name counts: the old one,
+  // company_website, was filled in by browser autofill next to the Company
+  // field and real customers were silently dropped as spam.
+  if (fields.a3d_trap) return json({ ok: true, ref: 'ignored' });
 
   const mode = fields.mode === 'dev' ? 'dev' : 'print';
   const maxBytes = Number(env.MAX_UPLOAD_MB || 50) * 1024 * 1024;
