@@ -246,10 +246,69 @@
   }
 
   /* ---------------- Form submission (Formspree) ---------------- */
+  /* A request that went through replaces the form with a clear confirmation:
+     a big tick, the reference, what happens next, and a way to send another.
+     A one-line status under the button was too easy to miss, above all on a
+     phone where the button sits below the fold after you tap it. */
+  function showSent(form, ref, isDev) {
+    var panel = document.createElement("div");
+    panel.className = "form-sent";
+    panel.setAttribute("role", "status");
+    panel.setAttribute("tabindex", "-1");
+    panel.innerHTML =
+      '<div class="form-sent-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17.5 19 7"/></svg></div>' +
+      "<h3>Request sent!</h3>" +
+      '<p class="form-sent-lead"></p>' +
+      '<p class="form-sent-ref"></p>' +
+      "<p>You'll hear back by email, usually the same day.</p>" +
+      '<p class="form-sent-wa"></p>' +
+      '<button type="button" class="btn btn-outline">Send another request</button>';
+    panel.querySelector(".form-sent-lead").textContent = isDev
+      ? "Thanks, we've received your project details."
+      : "Thanks, we've received your quote request.";
+    var refEl = panel.querySelector(".form-sent-ref");
+    if (ref) {
+      refEl.textContent = "Your reference: ";
+      var b = document.createElement("strong");
+      b.textContent = ref;
+      refEl.appendChild(b);
+    } else {
+      refEl.remove();
+    }
+    // Need it sooner: a WhatsApp link that already carries the reference.
+    var wa = panel.querySelector(".form-sent-wa");
+    var num = String(cfg.whatsappNumber || "").replace(/[^0-9]/g, "");
+    if (num) {
+      var a = document.createElement("a");
+      a.href = "https://wa.me/" + num + "?text=" + encodeURIComponent("Hi A3D Printing! About my request" + (ref ? " " + ref : "") + ":");
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = "Message us on WhatsApp";
+      wa.appendChild(document.createTextNode("Need it sooner? "));
+      wa.appendChild(a);
+      wa.appendChild(document.createTextNode(ref ? " and mention " + ref + "." : "."));
+    } else {
+      wa.remove();
+    }
+    var card = form.parentNode;
+    panel.querySelector("button").addEventListener("click", function () {
+      panel.remove();
+      card.classList.remove("is-sent");
+      form.hidden = false;
+      form.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    form.hidden = true;
+    card.classList.add("is-sent");
+    card.insertBefore(panel, form.nextSibling);
+    panel.scrollIntoView({ behavior: "smooth", block: "center" });
+    try { panel.focus({ preventScroll: true }); } catch (e) {}
+  }
+
   function initForm(formId) {
     var form = document.getElementById(formId);
     if (!form) return;
     var status = form.querySelector(".form-status");
+    var isDev = formId.indexOf("dev") !== -1;
 
     form.addEventListener("submit", function (e) {
       e.preventDefault();
@@ -262,14 +321,18 @@
       }
 
       var submitBtn = form.querySelector('button[type="submit"]');
-      var originalLabel = submitBtn ? submitBtn.textContent : "";
-      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "Sending…"; }
+      var originalLabel = submitBtn ? submitBtn.innerHTML : "";
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.classList.add("is-sending");
+        submitBtn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span> Sending your request…';
+      }
       status.className = "form-status";
       status.textContent = "";
 
       var data = new FormData(form);
       // Tell the back office which side of the site this came from.
-      data.append("mode", formId.indexOf("dev") !== -1 ? "dev" : "print");
+      data.append("mode", isDev ? "dev" : "print");
       fetch(endpoint, {
         method: "POST",
         body: data,
@@ -278,29 +341,32 @@
         .then(function (res) {
           if (res.ok) {
             return res.json().catch(function () { return {}; }).then(function (json) {
-              status.className = "form-status ok";
-              status.textContent = json && json.ref
-                ? "Thanks! Your request is in, reference " + json.ref + ". We'll get back to you shortly."
-                : "Thanks! Your request has been sent. We'll get back to you shortly.";
               form.reset();
-              var list = form.querySelector('[id$="file-list"]');
+              var list = form.querySelector('[id$="file-list"]') || form.querySelector('[id^="file-list"]');
               if (list) list.innerHTML = "";
-            });
-          } else {
-            return res.json().then(function (json) {
-              throw new Error((json && json.errors && json.errors[0] && json.errors[0].message) || "Something went wrong.");
+              showSent(form, json && json.ref, isDev);
             });
           }
+          return res.json().catch(function () { return {}; }).then(function (json) {
+            // Our back office answers { error }, Formspree answers { errors: [...] }.
+            throw new Error((json && (json.error || (json.errors && json.errors[0] && json.errors[0].message))) || "Something went wrong.");
+          });
         })
         .catch(function (err) {
           status.className = "form-status err";
-          status.textContent = "Couldn't send the form (" + err.message + "). Please try the WhatsApp button below instead.";
+          status.textContent = "Your request was not sent: " + err.message + " Please try again, or use the WhatsApp button below.";
+          status.scrollIntoView({ behavior: "smooth", block: "center" });
         })
         .finally(function () {
-          if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = originalLabel; }
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.classList.remove("is-sending");
+            submitBtn.innerHTML = originalLabel;
+          }
         });
     });
   }
+
 
   /* ---------------- Wire up quick-quote WhatsApp text from print form fields ---------------- */
   function initQuickQuoteSync() {
