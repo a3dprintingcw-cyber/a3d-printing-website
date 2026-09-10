@@ -15,13 +15,55 @@
 
 import { getSettings, setSetting } from './settings.js';
 
-const TOKEN_URL = 'https://oauth2.platform.intuit.com/oauth2/v1/tokens/bearer';
 export const QBO_SCOPES = 'com.intuit.quickbooks.accounting';
+
+// Intuit publishes its OAuth endpoints in a discovery document and asks apps to
+// read them from there rather than hardcode them, so a change on their side
+// does not break every integration at once. We cache it for a day and fall back
+// to the documented values if the fetch fails, because a discovery outage must
+// not take the connection down with it.
+const DISCOVERY = {
+  production: 'https://developer.api.intuit.com/.well-known/openid_configuration/',
+  sandbox: 'https://developer.api.intuit.com/.well-known/openid_sandbox_configuration/',
+};
+const FALLBACK = {
+  authorization_endpoint: 'https://appcenter.intuit.com/connect/oauth2',
+  token_endpoint: 'https://oauth2.platform.intuit.com/oauth2/v1/tokens/bearer',
+  revocation_endpoint: 'https://developer.api.intuit.com/v2/oauth2/tokens/revoke',
+};
+const DISCOVERY_TTL = 24 * 60 * 60 * 1000;
+
+export async function endpoints(env, sandbox) {
+  const key = sandbox ? 'qbo_discovery_sandbox' : 'qbo_discovery';
+  try {
+    const cached = await getSettings(env, [key, key + '_at']);
+    if (cached[key] && Date.now() - Number(cached[key + '_at'] || 0) < DISCOVERY_TTL) {
+      return { ...FALLBACK, ...JSON.parse(cached[key]) };
+    }
+  } catch (e) { /* a bad cache is not worth failing over */ }
+  try {
+    const res = await fetch(sandbox ? DISCOVERY.sandbox : DISCOVERY.production, { headers: { accept: 'application/json' } });
+    if (res.ok) {
+      const doc = await res.json();
+      const keep = {
+        authorization_endpoint: doc.authorization_endpoint,
+        token_endpoint: doc.token_endpoint,
+        revocation_endpoint: doc.revocation_endpoint,
+        issuer: doc.issuer,
+      };
+      await setSetting(env, key, JSON.stringify(keep));
+      await setSetting(env, key + '_at', String(Date.now()));
+      return { ...FALLBACK, ...keep };
+    }
+  } catch (e) { /* fall through to the documented endpoints */ }
+  return FALLBACK;
+}
 
 export async function qboConfig(env) {
   const s = await getSettings(env, [
     'qbo_client_id', 'qbo_client_secret', 'qbo_refresh_token',
     'qbo_realm_id', 'qbo_sandbox', 'qbo_company', 'qbo_currency',
+    'qbo_access_token', 'qbo_access_expires', 'qbo_needs_reconnect',
   ]).catch(() => ({}));
   return {
     clientId: env.QBO_CLIENT_ID || s.qbo_client_id || '',
@@ -31,7 +73,29 @@ export async function qboConfig(env) {
     sandbox: s.qbo_sandbox === '1',
     company: s.qbo_company || '',
     currency: s.qbo_currency || '',
+    cachedToken: s.qbo_access_token || '',
+    cachedExpires: Number(s.qbo_access_expires || 0),
+    needsReconnect: s.qbo_needs_reconnect === '1',
   };
+}
+
+/**
+ * Intuit tells us when the connection is dead rather than merely unlucky:
+ * invalid_grant means the refresh token is spent or the user revoked us, and
+ * no amount of retrying will fix it. We mark it, the back office says so, and
+ * the owner reconnects. Everything else is left alone as a passing failure.
+ */
+function isDeadConnection(status, json) {
+  const err = String((json && (json.error || json.error_description)) || '');
+  return status === 400 && /invalid_grant/i.test(err);
+}
+
+export async function markNeedsReconnect(env, on) {
+  await setSetting(env, 'qbo_needs_reconnect', on ? '1' : null);
+  if (on) {
+    await setSetting(env, 'qbo_access_token', null);
+    await setSetting(env, 'qbo_access_expires', null);
+  }
 }
 
 export async function isConfigured(env) {
@@ -44,13 +108,23 @@ function basicAuth(id, secret) {
 }
 
 /**
- * Intuit hands back a fresh refresh token on every call and invalidates the
- * old one, so the new value is stored before we do anything else with it.
+ * An Intuit access token is good for an hour, so it is kept and reused until
+ * it is nearly spent rather than fetched again for every call. Their guidance
+ * asks for exactly this, and it keeps us off their token endpoint.
+ *
+ * The refresh token is the part that needs care: Intuit issues a fresh one on
+ * every refresh and kills the old one, so the new value is stored before we do
+ * anything else with it.
  */
 export async function accessToken(env, conf) {
   const c = conf || (await qboConfig(env));
   if (!c.clientId || !c.clientSecret || !c.refreshToken) throw new Error('quickbooks: not connected yet');
-  const res = await fetch(TOKEN_URL, {
+
+  // A minute of headroom, so a token cannot expire mid-request.
+  if (c.cachedToken && c.cachedExpires > Date.now() + 60000) return c.cachedToken;
+
+  const ep = await endpoints(env, c.sandbox);
+  const res = await fetch(ep.token_endpoint, {
     method: 'POST',
     headers: {
       authorization: basicAuth(c.clientId, c.clientSecret),
@@ -59,18 +133,31 @@ export async function accessToken(env, conf) {
     },
     body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: c.refreshToken }),
   });
+  const tokenTid = res.headers.get('intuit_tid') || '';
+  if (tokenTid) console.log('qbo token', res.status, 'intuit_tid=' + tokenTid);
   const json = await res.json().catch(() => ({}));
   if (!res.ok || !json.access_token) {
-    throw new Error('quickbooks: could not refresh the token, ' + (json.error_description || json.error || res.status));
+    if (isDeadConnection(res.status, json)) {
+      await markNeedsReconnect(env, true);
+      throw new Error('quickbooks: the connection was revoked or has expired, reconnect it in Settings');
+    }
+    throw new Error('quickbooks: could not refresh the token, ' + (json.error_description || json.error || res.status) +
+      (tokenTid ? ' [intuit_tid ' + tokenTid + ']' : ''));
   }
   if (json.refresh_token && json.refresh_token !== c.refreshToken) {
     await setSetting(env, 'qbo_refresh_token', json.refresh_token);
   }
+  const ttl = Number(json.expires_in || 3600) * 1000;
+  await setSetting(env, 'qbo_access_token', json.access_token);
+  await setSetting(env, 'qbo_access_expires', String(Date.now() + ttl));
+  // A refresh that works means whatever was wrong is over.
+  if (c.needsReconnect) await markNeedsReconnect(env, false);
   return json.access_token;
 }
 
-export async function exchangeCode(clientId, clientSecret, code, redirectUri) {
-  const res = await fetch(TOKEN_URL, {
+export async function exchangeCode(env, { clientId, clientSecret, sandbox }, code, redirectUri) {
+  const ep = await endpoints(env, sandbox);
+  const res = await fetch(ep.token_endpoint, {
     method: 'POST',
     headers: {
       authorization: basicAuth(clientId, clientSecret),
@@ -79,11 +166,40 @@ export async function exchangeCode(clientId, clientSecret, code, redirectUri) {
     },
     body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: redirectUri }),
   });
+  const exTid = res.headers.get('intuit_tid') || '';
+  if (exTid) console.log('qbo exchange', res.status, 'intuit_tid=' + exTid);
   const json = await res.json().catch(() => ({}));
   if (!res.ok || !json.refresh_token) {
-    throw new Error(json.error_description || json.error || ('token exchange failed, ' + res.status));
+    throw new Error((json.error_description || json.error || ('token exchange failed, ' + res.status)) +
+      (exTid ? ' [intuit_tid ' + exTid + ']' : ''));
   }
+  await markNeedsReconnect(env, false);
   return { refreshToken: json.refresh_token };
+}
+
+/**
+ * Tells Intuit we are done with the grant when the owner disconnects, instead
+ * of just forgetting it locally and leaving a live token on their side.
+ * Best effort: if it fails we still forget our copy.
+ */
+export async function revokeToken(env, conf) {
+  const c = conf || (await qboConfig(env));
+  if (!c.clientId || !c.clientSecret || !c.refreshToken) return false;
+  try {
+    const ep = await endpoints(env, c.sandbox);
+    const res = await fetch(ep.revocation_endpoint, {
+      method: 'POST',
+      headers: {
+        authorization: basicAuth(c.clientId, c.clientSecret),
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify({ token: c.refreshToken }),
+    });
+    return res.ok;
+  } catch (e) {
+    return false;
+  }
 }
 
 function baseUrl(conf) {
@@ -92,8 +208,16 @@ function baseUrl(conf) {
     : 'https://quickbooks.api.intuit.com';
 }
 
-/** One authenticated call against the Accounting API. */
-async function api(env, conf, path, opts = {}) {
+/**
+ * One authenticated call against the Accounting API.
+ *
+ * A 401 means the access token we held is no longer accepted, usually because
+ * it expired a moment ago. That is worth exactly one more go: throw the cached
+ * token away, get a fresh one, and repeat the call. This is not a retry loop
+ * against a failing login, it is the documented way to ride out an access
+ * token expiring mid-flight, and it happens at most once per call.
+ */
+async function api(env, conf, path, opts = {}, isRetry = false) {
   const token = await accessToken(env, conf);
   const url = baseUrl(conf) + '/v3/company/' + conf.realmId + path +
     (path.includes('?') ? '&' : '?') + 'minorversion=75';
@@ -106,14 +230,34 @@ async function api(env, conf, path, opts = {}) {
     },
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
+
+  // Intuit stamps every response with a transaction id. Capturing it is what
+  // makes a support ticket answerable, so it is logged for every call and
+  // carried into the error text where the back office can show it.
+  const tid = res.headers.get('intuit_tid') || '';
+  if (tid) console.log('qbo', res.status, opts.method || 'GET', path.split('?')[0], 'intuit_tid=' + tid);
+
+  if (res.status === 401 && !isRetry) {
+    await setSetting(env, 'qbo_access_token', null);
+    await setSetting(env, 'qbo_access_expires', null);
+    return api(env, { ...conf, cachedToken: '', cachedExpires: 0 }, path, opts, true);
+  }
+
+  const ref = tid ? ' [intuit_tid ' + tid + ']' : '';
+
   if (opts.accept === 'application/pdf') {
-    if (!res.ok) throw new Error('quickbooks: pdf ' + res.status);
+    if (!res.ok) throw new Error('quickbooks: pdf ' + res.status + ref);
     return new Uint8Array(await res.arrayBuffer());
   }
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
+    if (res.status === 401) {
+      // Refused again with a token we just minted, so the grant itself is gone.
+      await markNeedsReconnect(env, true);
+      throw new Error('quickbooks: the connection was revoked or has expired, reconnect it in Settings');
+    }
     const f = json.Fault && json.Fault.Error && json.Fault.Error[0];
-    throw new Error('quickbooks: ' + (f ? (f.Message + (f.Detail ? ' (' + f.Detail + ')' : '')) : res.status));
+    throw new Error('quickbooks: ' + (f ? (f.Message + (f.Detail ? ' (' + f.Detail + ')' : '')) : res.status) + ref);
   }
   return json;
 }
