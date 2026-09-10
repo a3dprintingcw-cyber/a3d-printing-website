@@ -157,8 +157,14 @@ async function handleBeacon(request, env) {
 
 async function noteQboError(env, quoteId, err) {
   console.log('qbo error on quote', quoteId, err.message);
+  // When the grant itself is gone, say the one useful thing rather than
+  // repeating Intuit's wording at someone who cannot act on it.
+  const dead = /revoked or has expired/.test(err.message);
+  const detail = dead
+    ? 'QuickBooks needs reconnecting. Open Settings and connect it again, then press Send once more.'
+    : String(err.message).slice(0, 300);
   await env.DB.prepare('UPDATE quotes SET qbo_error = ? WHERE id = ?')
-    .bind(String(err.message).slice(0, 300), quoteId).run().catch(() => {});
+    .bind(detail, quoteId).run().catch(() => {});
 }
 
 /** Creates the QuickBooks estimate for a freshly built quote. */
@@ -293,6 +299,7 @@ export async function adminRoutes(request, env, url, email) {
         connected: Boolean(qc.clientId && qc.clientSecret && qc.refreshToken && qc.realmId),
         hasApp: Boolean(qc.clientId && qc.clientSecret),
         company: qc.company, currency: qc.currency, sandbox: qc.sandbox,
+        needsReconnect: qc.needsReconnect,
       },
     });
   }
@@ -391,7 +398,8 @@ export async function adminRoutes(request, env, url, email) {
     if (!conf.clientId || !conf.clientSecret) return bad('Save the client id and secret first.');
     const state = crypto.randomUUID();
     await setSetting(env, 'qbo_oauth_state', state + '|' + Date.now());
-    const auth = new URL('https://appcenter.intuit.com/connect/oauth2');
+    const ep = await qbo.endpoints(env, conf.sandbox);
+    const auth = new URL(ep.authorization_endpoint);
     auth.searchParams.set('client_id', conf.clientId);
     auth.searchParams.set('redirect_uri', url.origin + '/api/admin/qbo/callback');
     auth.searchParams.set('response_type', 'code');
@@ -414,7 +422,7 @@ export async function adminRoutes(request, env, url, email) {
     if (!realmId) return done('QuickBooks did not say which company to use. Try Connect again.', false);
     const conf = await qbo.qboConfig(env);
     try {
-      const res = await qbo.exchangeCode(conf.clientId, conf.clientSecret, code, url.origin + '/api/admin/qbo/callback');
+      const res = await qbo.exchangeCode(env, conf, code, url.origin + '/api/admin/qbo/callback');
       await setSetting(env, 'qbo_refresh_token', res.refreshToken);
       await setSetting(env, 'qbo_realm_id', realmId);
       // Read the company back so the back office can show which one is wired
@@ -430,11 +438,15 @@ export async function adminRoutes(request, env, url, email) {
   }
 
   if (p === '/qbo/disconnect' && method === 'POST') {
+    // Tell Intuit we are done before forgetting our own copy, so the grant is
+    // actually gone rather than merely forgotten on our side.
+    const revoked = await qbo.revokeToken(env).catch(() => false);
     for (const k of ['qbo_client_id', 'qbo_client_secret', 'qbo_refresh_token', 'qbo_realm_id',
-      'qbo_sandbox', 'qbo_company', 'qbo_currency', 'qbo_oauth_state']) {
+      'qbo_sandbox', 'qbo_company', 'qbo_currency', 'qbo_oauth_state',
+      'qbo_access_token', 'qbo_access_expires', 'qbo_needs_reconnect']) {
       await setSetting(env, k, null);
     }
-    return json({ ok: true });
+    return json({ ok: true, revoked });
   }
 
   if (p === '/gmail/disconnect' && method === 'POST') {
