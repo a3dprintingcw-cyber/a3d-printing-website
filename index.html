@@ -9,7 +9,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="assets/img/favicon-192.png">
 <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
 <meta name="theme-color" content="#1e5fd6">
-<link rel="stylesheet" href="css/styles.css?v=20260910b">
+<link rel="stylesheet" href="css/styles.css?v=20260910c">
 </head>
 <body data-mode="print">
 
@@ -378,7 +378,13 @@
 
             <form id="quote-form-print" enctype="multipart/form-data">
               <input type="hidden" name="_subject" value="New 3D print quote request">
-              <input type="text" name="company_website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px" >
+              <!-- Spam trap: people never see it, bots fill it in. Its name means
+                   nothing on purpose, so browser autofill leaves it alone. The old
+                   name, company_website, got filled with the company by autofill
+                   and real requests were thrown away as spam. -->
+              <div aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden">
+                <input type="text" name="a3d_trap" tabindex="-1" autocomplete="off" value="">
+              </div>
               <div class="form-row">
                 <div class="field">
                   <label for="p-name">Full name</label>
@@ -479,7 +485,13 @@
 
             <form id="quote-form-dev">
               <input type="hidden" name="_subject" value="New website/app project inquiry">
-              <input type="text" name="company_website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px" >
+              <!-- Spam trap: people never see it, bots fill it in. Its name means
+                   nothing on purpose, so browser autofill leaves it alone. The old
+                   name, company_website, got filled with the company by autofill
+                   and real requests were thrown away as spam. -->
+              <div aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden">
+                <input type="text" name="a3d_trap" tabindex="-1" autocomplete="off" value="">
+              </div>
               <div class="form-row">
                 <div class="field">
                   <label for="d-name">Full name</label>
@@ -675,7 +687,7 @@
   </div>
 </footer>
 
-<script src="js/config.js?v=20260910b"></script>
-<script src="js/main.js?v=20260910b"></script>
+<script src="js/config.js?v=20260910c"></script>
+<script src="js/main.js?v=20260910c"></script>
 </body>
 </html>
