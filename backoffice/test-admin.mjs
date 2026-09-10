@@ -1,5 +1,11 @@
 import { Miniflare } from 'miniflare';
 import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// Paths are relative to this file so the suite runs anywhere: here, on a
+// laptop, or on a CI runner that has never heard of /home/claude.
+const HERE = path.dirname(fileURLToPath(import.meta.url));
 import vm from 'node:vm';
 import { ADMIN_HTML } from './src/admin-html.js';
 
@@ -12,9 +18,9 @@ const bindings = {
 
 const mf = new Miniflare({
   modules: true,
-  modulesRoot: '/home/claude/backoffice',
+  modulesRoot: HERE,
   modulesRules: [{ type: 'ESModule', include: ['**/*.js'] }],
-  scriptPath: '/home/claude/backoffice/test-harness.js',
+  scriptPath: path.join(HERE, 'test-harness.js'),
   compatibilityDate: '2026-08-06',
   d1Databases: { DB: 'a3d' },
   r2Buckets: { FILES: 'a3d-uploads' },
@@ -25,9 +31,9 @@ const pub = mf, admin = mf;
 const db = await mf.getD1Database('DB');
 // Every migration, in order, so the tests run against the same schema the live
 // database has rather than only the first one.
-const migDir = '/home/claude/backoffice/migrations';
+const migDir = path.join(HERE, 'migrations');
 for (const file of fs.readdirSync(migDir).filter(f => f.endsWith('.sql')).sort()) {
-  const sql = fs.readFileSync(migDir + '/' + file, 'utf8')
+  const sql = fs.readFileSync(path.join(migDir, file), 'utf8')
     .split('\n').map(l => l.replace(/--.*$/, '')).join('\n');
   for (const stmt of sql.split(';').map(x => x.trim()).filter(Boolean)) {
     await db.exec(stmt.replace(/\s+/g, ' '));
