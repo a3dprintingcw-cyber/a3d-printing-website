@@ -331,6 +331,60 @@ await t('the admin page has no unclosed tags in the shell', () => {
   }
 });
 
+// --------------------------------- QuickBooks OAuth lifecycle
+//
+// These are the scenarios Intuit's app assessment asks about, so they are
+// tested rather than asserted: a dead grant is recognised and surfaced, the
+// state parameter defends the callback, and disconnect leaves nothing behind.
+
+await t('the discovery document is used, with a fallback that still works', async () => {
+  const qbo = await import('./src/qbo.js');
+  const ep = await qbo.endpoints({ DB: db }, false);
+  assert(ep.token_endpoint && /^https:/.test(ep.token_endpoint), 'no token endpoint: ' + ep.token_endpoint);
+  assert(ep.authorization_endpoint && /^https:/.test(ep.authorization_endpoint), 'no auth endpoint');
+  assert(ep.revocation_endpoint && /^https:/.test(ep.revocation_endpoint), 'no revocation endpoint');
+});
+
+await t('a revoked connection is flagged for reconnection, not retried', async () => {
+  const qbo = await import('./src/qbo.js');
+  await qbo.markNeedsReconnect({ DB: db }, true);
+  const conf = await qbo.qboConfig({ DB: db });
+  assert(conf.needsReconnect === true, 'should be flagged');
+  const row = await db.prepare("select value from settings where key = 'qbo_access_token'").first();
+  assert(!row, 'the cached access token should be dropped when the grant dies');
+  await qbo.markNeedsReconnect({ DB: db }, false);
+  const after = await qbo.qboConfig({ DB: db });
+  assert(after.needsReconnect === false, 'should clear');
+});
+
+await t('the back office reports when quickbooks needs reconnecting', async () => {
+  const qbo = await import('./src/qbo.js');
+  await qbo.markNeedsReconnect({ DB: db }, true);
+  const me = await (await A('/me')).json();
+  assert(me.qbo.needsReconnect === true, 'the admin should be told to reconnect');
+  await qbo.markNeedsReconnect({ DB: db }, false);
+});
+
+await t('the oauth state parameter is what defends the callback', async () => {
+  await A('/qbo/app', { method: 'POST', body: JSON.stringify({ client_id: 'AB', client_secret: 'sec' }) });
+  const r = await A('/qbo/start', { redirect: 'manual' });
+  const state = new URL(r.headers.get('location')).searchParams.get('state');
+  assert(state && state.length > 20, 'state should be a long random value');
+  const wrong = await A('/qbo/callback?code=x&state=' + state + 'tampered&realmId=1', { redirect: 'manual' });
+  assert(wrong.headers.get('location').includes('error='), 'a tampered state must be refused');
+  const none = await A('/qbo/callback?code=x&realmId=1', { redirect: 'manual' });
+  assert(none.headers.get('location').includes('error='), 'a missing state must be refused');
+  await A('/qbo/disconnect', { method: 'POST' });
+});
+
+await t('disconnect leaves no quickbooks trace at all', async () => {
+  await db.prepare("insert into settings (key, value) values ('qbo_access_token','x') on conflict(key) do update set value = excluded.value").run();
+  await db.prepare("insert into settings (key, value) values ('qbo_needs_reconnect','1') on conflict(key) do update set value = excluded.value").run();
+  await A('/qbo/disconnect', { method: 'POST' });
+  const rows = await db.prepare("select key from settings where key like 'qbo_%' and key not like 'qbo_discovery%'").all();
+  assert(rows.results.length === 0, 'left behind: ' + rows.results.map(r => r.key).join(','));
+});
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 await mf.dispose();
 process.exit(fail ? 1 : 0);
