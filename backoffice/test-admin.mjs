@@ -500,6 +500,49 @@ await t('the price list can grow and shrink', async () => {
   assert(after === before, 'expected ' + before + ' again, got ' + after);
 });
 
+await t('the public prices page shows only what is switched on for the website', async () => {
+  const P = () => pub.dispatchFetch('https://app.a3dprinting.com/api/prices', { headers: { Origin: 'https://a3dprinting.com' } });
+  const first = await P();
+  assert(first.status === 200, 'http ' + first.status);
+  assert(first.headers.get('access-control-allow-origin') === 'https://a3dprinting.com', 'no CORS for the site');
+  const empty = await first.json();
+  assert(Array.isArray(empty.prices) && empty.prices.length === 0, 'nothing is switched on yet, got ' + empty.prices.length);
+  const rows = (await (await A('/prices')).json()).prices;
+  assert(rows.every((p) => p.web === 0), 'new column should default to off');
+  const [a, b] = rows;
+  await A('/prices', { method: 'POST', body: JSON.stringify({ prices: [
+    { id: a.id, name: 'Shown thing', description: 'Public words', unit_cents: 350, active: 1, web: true },
+    { id: b.id, name: b.name, description: b.description, unit_cents: 999, active: 1, web: false },
+  ] }) });
+  const j = await (await P()).json();
+  assert(j.prices.length === 1, 'expected exactly one public row, got ' + j.prices.length);
+  const row = j.prices[0];
+  assert(row.name === 'Shown thing' && row.unit_cents === 350 && row.description === 'Public words', JSON.stringify(row));
+  assert(!('id' in row) && !('active' in row) && !('sku' in row), 'public payload leaks internal fields');
+  assert(j.currency === 'XCG', 'currency ' + j.currency);
+});
+
+await t('saving without the website field leaves the website switch alone', async () => {
+  const rows = (await (await A('/prices')).json()).prices;
+  const on = rows.find((p) => p.web === 1);
+  assert(on, 'expected the row from the previous test to be on');
+  await A('/prices', { method: 'POST', body: JSON.stringify({ prices: [
+    { id: on.id, name: on.name, description: on.description, unit_cents: on.unit_cents, active: 1 },
+  ] }) });
+  const again = (await (await A('/prices')).json()).prices.find((p) => p.id === on.id);
+  assert(again.web === 1, 'an old client saving took the item off the website');
+  await A('/prices', { method: 'POST', body: JSON.stringify({ prices: [
+    { id: on.id, name: on.name, description: on.description, unit_cents: on.unit_cents, active: 1, web: false },
+  ] }) });
+  const off = (await (await A('/prices')).json()).prices.find((p) => p.id === on.id);
+  assert(off.web === 0, 'switching off did not stick');
+});
+
+await t('the price list screen has the website switch', async () => {
+  assert(ADMIN_HTML.includes('class="switch"') && ADMIN_HTML.includes("querySelector('.w')"), 'switch or save wiring missing');
+  assert(ADMIN_HTML.includes('pl-web') && ADMIN_HTML.includes('pl-off'), 'the two sections are missing');
+});
+
 await t('a customer page shows their orders and what they have paid', async () => {
   const list = (await (await A('/customers')).json()).customers;
   assert(list.length, 'no customers to look at');
