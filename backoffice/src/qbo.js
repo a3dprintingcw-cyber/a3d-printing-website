@@ -304,13 +304,32 @@ export async function preferences(env, conf) {
   };
 }
 
-/** The tax codes this company actually has, so the owner picks one instead of guessing. */
+/**
+ * The tax codes this company actually has, with the rate each one adds up to,
+ * so the owner picks one instead of guessing and the back office can charge
+ * exactly what QuickBooks is going to invoice. A code can stack several rates,
+ * hence the sum rather than the first one found.
+ */
 export async function taxCodes(env, conf) {
   const j = await api(env, conf, '/query?query=' + encodeURIComponent('select * from TaxCode maxresults 100'));
   const rows = (j.QueryResponse && j.QueryResponse.TaxCode) || [];
-  return rows
-    .filter((t) => t.Active !== false)
-    .map((t) => ({ id: String(t.Id), name: t.Name || String(t.Id), taxable: t.Taxable !== false }));
+  const active = rows.filter((t) => t.Active !== false);
+  let rates = {};
+  try {
+    const r = await api(env, conf, '/query?query=' + encodeURIComponent('select * from TaxRate maxresults 200'));
+    for (const t of (r.QueryResponse && r.QueryResponse.TaxRate) || []) {
+      rates[String(t.Id)] = Number(t.RateValue || 0);
+    }
+  } catch (e) { /* a code without a readable rate is still pickable */ }
+  return active.map((t) => {
+    const details = (t.SalesTaxRateList && t.SalesTaxRateList.TaxRateDetail) || [];
+    let pct = 0;
+    for (const d of details) {
+      const ref = d.TaxRateRef && d.TaxRateRef.value;
+      if (ref && rates[String(ref)] != null) pct += rates[String(ref)];
+    }
+    return { id: String(t.Id), name: t.Name || String(t.Id), taxable: t.Taxable !== false, pct };
+  });
 }
 
 /**
