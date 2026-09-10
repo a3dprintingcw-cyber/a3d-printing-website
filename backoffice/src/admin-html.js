@@ -564,7 +564,7 @@ function settings() {
         '<ol class="steps">' +
         '<li>Open <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud credentials</a> and create an OAuth client of type <b>Web application</b>.</li>' +
         '<li>Add this exact redirect URI to it:<br><code class="copy" id="redir">' + esc(redirect) + '</code> ' +
-        '<button class="ghost small" onclick="copyText('redir')">Copy</button></li>' +
+        '<button class="ghost small" onclick="copyText(\'redir\')">Copy</button></li>' +
         '<li>Paste the client id and secret it gives you here, then press Connect.</li>' +
         '</ol>' +
         '<div class="form"><label>Client id<input id="gcid" placeholder="....apps.googleusercontent.com" autocomplete="off"></label>' +
