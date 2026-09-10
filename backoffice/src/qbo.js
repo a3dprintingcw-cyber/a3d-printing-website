@@ -370,7 +370,7 @@ export async function searchCustomers(env, conf, term) {
  *
  * `hint` is a QuickBooks id the owner picked by hand. It always wins.
  */
-export async function findOrCreateCustomer(env, conf, { name, email, phone, hint }) {
+export async function findOrCreateCustomer(env, conf, { name, email, phone, company, hint }) {
   if (hint) return String(hint);
 
   if (email) {
@@ -400,6 +400,9 @@ export async function findOrCreateCustomer(env, conf, { name, email, phone, hint
       DisplayName: clean || 'Customer',
       ...(email ? { PrimaryEmailAddr: { Address: email } } : {}),
       ...(phone ? { PrimaryPhone: { FreeFormNumber: phone } } : {}),
+      // The company goes on the new card's Company field, so it prints on the
+      // estimate and invoice. Matching still runs on email and name above.
+      ...(company ? { CompanyName: String(company).slice(0, 100) } : {}),
     },
   });
   return String(created.Customer.Id);
