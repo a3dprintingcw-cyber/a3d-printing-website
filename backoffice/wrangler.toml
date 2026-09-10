@@ -10,7 +10,15 @@
 name = "a3d-backoffice"
 main = "src/index.js"
 compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
 workers_dev = false
+
+# Deploys run from GitHub Actions on every push to main, so the live Worker
+# always matches what is in this repo.
+account_id = "c169592ab9e6b197cfe88e7cd8836986"
+
+[observability]
+enabled = true
 
 # The Worker lives on its own subdomain so the marketing site's DNS never
 # has to change: app.a3dprinting.com serves /admin and /api.
