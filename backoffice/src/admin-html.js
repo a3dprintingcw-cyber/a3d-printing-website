@@ -576,7 +576,13 @@ function settings() {
 
     var qb = me.qbo || {};
     html += '<div class="card"><h2>Accounting</h2>';
-    if (qb.connected) {
+    if (qb.needsReconnect) {
+      html += '<p style="color:var(--warn)"><b>QuickBooks needs reconnecting.</b> The connection to ' +
+        esc(qb.company || 'QuickBooks') + ' was revoked or has expired, so estimates and invoices are not being created.</p>' +
+        '<p class="muted">Nothing has been lost. Reconnect and the quotes that failed can be sent again.</p>' +
+        '<p><a href="/api/admin/qbo/start"><button class="primary">Reconnect QuickBooks</button></a> ' +
+        '<button class="ghost" onclick="qboDisconnect()">Forget it instead</button></p>';
+    } else if (qb.connected) {
       html += '<p>Connected to <b>' + esc(qb.company || 'QuickBooks') + '</b>' +
         (qb.currency ? ', books in ' + esc(qb.currency) : '') +
         (qb.sandbox ? ' <span style="color:var(--warn)">(sandbox company, not your real books)</span>' : '') + '.</p>' +
