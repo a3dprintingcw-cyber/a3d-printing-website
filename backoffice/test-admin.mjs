@@ -593,6 +593,29 @@ await t('deleting a customer takes their orders and nothing else', async () => {
   assert(ADMIN_HTML.includes('deleteCustomer('), 'no delete button on the customer screens');
 });
 
+// Print and dev are two tables on the Orders page, so an order has to land on
+// the side it was added to, and one filed wrongly has to be movable.
+await t('orders are kept apart by side and can be moved across', async () => {
+  const dev = await (await A('/orders', { method: 'POST', body: JSON.stringify({ name: 'Web Wendy', mode: 'dev', project_type: 'Webshop', notes: 'Needs a shop' }) })).json();
+  const print = await (await A('/orders', { method: 'POST', body: JSON.stringify({ name: 'Print Pete', notes: 'Keychains' }) })).json();
+  const d = (await (await A('/orders/' + dev.id)).json()).order;
+  assert(d.mode === 'dev' && d.project_type === 'Webshop', 'dev order stored as ' + d.mode + ' / ' + d.project_type);
+  const pr = (await (await A('/orders/' + print.id)).json()).order;
+  assert(pr.mode === 'print' && !pr.project_type, 'a New order without a side should be 3D printing, got ' + pr.mode);
+  const list = (await (await A('/orders')).json()).orders;
+  assert(list.find((o) => o.id === dev.id).mode === 'dev', 'the list must carry the side');
+  const mv = await A('/orders/' + print.id, { method: 'POST', body: JSON.stringify({ mode: 'dev' }) });
+  assert(mv.status === 200, 'move http ' + mv.status);
+  const moved = await (await A('/orders/' + print.id)).json();
+  assert(moved.order.mode === 'dev', 'move did not stick');
+  assert(moved.events.some((e) => /Web & app dev/.test(e.detail)), 'the move is not in the history');
+  await A('/orders/' + print.id, { method: 'POST', body: JSON.stringify({ mode: 'nonsense' }) });
+  assert((await (await A('/orders/' + print.id)).json()).order.mode === 'dev', 'an unknown side must be ignored');
+  assert(ADMIN_HTML.includes("orderSection('3D printing'") && ADMIN_HTML.includes("orderSection('Web & app dev'"), 'the two order tables are missing');
+  await A('/orders/' + dev.id, { method: 'DELETE' });
+  await A('/orders/' + print.id, { method: 'DELETE' });
+});
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 await mf.dispose();
 process.exit(fail ? 1 : 0);
