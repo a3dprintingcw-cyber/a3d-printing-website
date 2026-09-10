@@ -673,6 +673,14 @@ export async function adminRoutes(request, env, url, email) {
       await env.DB.prepare('INSERT INTO order_events (order_id, kind, detail) VALUES (?, ?, ?)')
         .bind(id, 'note', String(body.note).slice(0, 2000)).run();
     }
+    // An order filed on the wrong side can be moved across, and the move is
+    // written into its history like any other change.
+    if (body.mode === 'print' || body.mode === 'dev') {
+      await env.DB.prepare("UPDATE orders SET mode = ?, updated_at = datetime('now') WHERE id = ?")
+        .bind(body.mode, id).run();
+      await env.DB.prepare('INSERT INTO order_events (order_id, kind, detail) VALUES (?, ?, ?)')
+        .bind(id, 'note', body.mode === 'dev' ? 'Moved to Web & app dev' : 'Moved to 3D printing').run();
+    }
     return json({ ok: true });
   }
 
@@ -708,10 +716,13 @@ export async function adminRoutes(request, env, url, email) {
       phone: body.phone || '',
       company: body.company || '',
     });
+    // Print or dev decides which table on the Orders page it lands in.
+    const mode = body.mode === 'dev' ? 'dev' : 'print';
     const order = await env.DB.prepare(
-      `INSERT INTO orders (ref, customer_id, mode, material, colour, quantity, notes, source)
-       VALUES ('pending', ?, 'print', ?, ?, ?, ?, 'counter') RETURNING *`,
-    ).bind(customer.id, body.material || null, body.colour || null, body.quantity || null, body.notes || null).first();
+      `INSERT INTO orders (ref, customer_id, mode, material, colour, quantity, project_type, notes, source)
+       VALUES ('pending', ?, ?, ?, ?, ?, ?, ?, 'counter') RETURNING *`,
+    ).bind(customer.id, mode, body.material || null, body.colour || null, body.quantity || null,
+      mode === 'dev' ? (String(body.project_type || '').trim() || null) : null, body.notes || null).first();
     const ref = `A3D-${String(order.id).padStart(4, '0')}`;
     await env.DB.prepare('UPDATE orders SET ref = ? WHERE id = ?').bind(ref, order.id).run();
     await env.DB.prepare('INSERT INTO order_events (order_id, kind, detail) VALUES (?, ?, ?)')
