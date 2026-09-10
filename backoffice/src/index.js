@@ -119,12 +119,16 @@ export function realEmail(email) {
 
 async function upsertCustomer(env, { name, email, phone, company }) {
   const clean = (email || '').trim().toLowerCase();
+  // Company is optional on the form. Given, it is kept; left blank, whatever
+  // was on file stays, so a second request without it does not wipe it.
+  company = String(company || '').trim().slice(0, 120);
   const found = await env.DB.prepare('SELECT * FROM customers WHERE email = ?').bind(clean).first();
   if (found) {
     await env.DB.prepare(
-      'UPDATE customers SET name = COALESCE(NULLIF(?, \'\'), name), phone = COALESCE(NULLIF(?, \'\'), phone) WHERE id = ?',
-    ).bind(name || '', phone || '', found.id).run();
-    return { ...found, name: name || found.name, phone: phone || found.phone };
+      'UPDATE customers SET name = COALESCE(NULLIF(?, \'\'), name), phone = COALESCE(NULLIF(?, \'\'), phone), ' +
+      'company = COALESCE(NULLIF(?, \'\'), company) WHERE id = ?',
+    ).bind(name || '', phone || '', company, found.id).run();
+    return { ...found, name: name || found.name, phone: phone || found.phone, company: company || found.company };
   }
   const res = await env.DB.prepare(
     'INSERT INTO customers (name, email, phone, company) VALUES (?, ?, ?, ?) RETURNING *',
@@ -252,7 +256,7 @@ async function syncEstimate(env, quoteId) {
     let qboCustomerId = customer.qbo_customer_id;
     if (!qboCustomerId) {
       qboCustomerId = await qbo.findOrCreateCustomer(env, conf, {
-        name: customer.name, email: realEmail(customer.email), phone: customer.phone,
+        name: customer.name, email: realEmail(customer.email), phone: customer.phone, company: customer.company,
       });
       await env.DB.prepare('UPDATE customers SET qbo_customer_id = ? WHERE id = ?')
         .bind(qboCustomerId, customer.id).run();
@@ -612,14 +616,14 @@ export async function adminRoutes(request, env, url, email) {
   if (p === '/orders' && method === 'GET') {
     const status = url.searchParams.get('status');
     const q = url.searchParams.get('q');
-    let sql = `SELECT o.*, c.name customer_name, c.email customer_email,
+    let sql = `SELECT o.*, c.name customer_name, c.email customer_email, c.company customer_company,
                (SELECT COUNT(*) FROM order_files f WHERE f.order_id = o.id) files
                FROM orders o JOIN customers c ON c.id = o.customer_id WHERE 1=1`;
     const binds = [];
     if (status && status !== 'all') { sql += ' AND o.status = ?'; binds.push(status); }
     if (q) {
-      sql += ' AND (o.ref LIKE ? OR c.name LIKE ? OR c.email LIKE ? OR o.notes LIKE ?)';
-      binds.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
+      sql += ' AND (o.ref LIKE ? OR c.name LIKE ? OR c.email LIKE ? OR c.company LIKE ? OR o.notes LIKE ?)';
+      binds.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
     }
     sql += ' ORDER BY o.created_at DESC LIMIT 200';
     const rows = await env.DB.prepare(sql).bind(...binds).all();
@@ -631,7 +635,7 @@ export async function adminRoutes(request, env, url, email) {
     const id = Number(orderMatch[1]);
     const order = await env.DB.prepare(
       `SELECT o.*, c.name customer_name, c.email customer_email, c.phone customer_phone,
-              c.qbo_customer_id customer_qbo_id
+              c.company customer_company, c.qbo_customer_id customer_qbo_id
        FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = ?`,
     ).bind(id).first();
     if (!order) return bad('No such order', 404);
