@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 import vm from 'node:vm';
 import { ADMIN_HTML } from './src/admin-html.js';
+import { newOrderAlert } from './src/email.js';
 
 const bindings = {
   ADMIN_EMAIL: 'a3dprinting.cw@gmail.com', BUSINESS_NAME: 'A3D Printing', CURRENCY: 'XCG',
@@ -614,6 +615,15 @@ await t('orders are kept apart by side and can be moved across', async () => {
   assert(ADMIN_HTML.includes("orderSection('3D printing'") && ADMIN_HTML.includes("orderSection('Web & app dev'"), 'the two order tables are missing');
   await A('/orders/' + dev.id, { method: 'DELETE' });
   await A('/orders/' + print.id, { method: 'DELETE' });
+});
+
+// The new request email is how he hears about an order, usually on his phone.
+// Its link has to open that order in the back office, on the app subdomain.
+await t('the new request email links straight to the order', async () => {
+  const text = newOrderAlert({ id: 9, ref: 'A3D-0009', mode: 'print', material: 'PLA' },
+    { name: 'Jose', email: 'j@example.com', company: 'SVB' }, []);
+  assert(text.includes('https://app.a3dprinting.com/admin#/order/9'), 'wrong link in: ' + text);
+  assert(!/https:\/\/a3dprinting\.com\/admin/.test(text), 'still points at the public site');
 });
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
