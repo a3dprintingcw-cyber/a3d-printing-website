@@ -28,6 +28,43 @@ function corsHeaders(env, request) {
   };
 }
 
+// Whether an item appears on the public Prices page is its own switch, kept
+// apart from `active` (which only decides what the quote builder offers), so a
+// client-specific item can be quotable without being advertised.
+//
+// The column is added by the Worker itself the first time the price list is
+// touched, not by a migration file: deploys run from CI, migrations do not,
+// and a schema change that waits on someone remembering to run
+// `wrangler d1 migrations apply` is a schema change that ships broken. The
+// check is one PRAGMA per isolate, and ALTER ... ADD COLUMN racing another
+// isolate is caught by name rather than trusted not to happen.
+let webColumnReady = false;
+export async function ensureWebColumn(env) {
+  if (webColumnReady) return;
+  const cols = (await env.DB.prepare('PRAGMA table_info(price_list)').all()).results || [];
+  if (!cols.some((c) => c.name === 'web')) {
+    try {
+      await env.DB.prepare('ALTER TABLE price_list ADD COLUMN web INTEGER NOT NULL DEFAULT 0').run();
+    } catch (e) {
+      if (!/duplicate column/i.test(String(e && e.message))) throw e;
+    }
+  }
+  webColumnReady = true;
+}
+
+/**
+ * The public Prices page. Only rows switched on for the website, only the
+ * fields a visitor should see, and a short cache so a busy page does not hit
+ * the database on every view while a change still shows within a minute.
+ */
+async function handlePublicPrices(env) {
+  await ensureWebColumn(env);
+  const rows = (await env.DB.prepare(
+    'SELECT name, description, unit_cents FROM price_list WHERE web = 1 ORDER BY position, id',
+  ).all()).results || [];
+  return json({ currency: env.CURRENCY || 'XCG', prices: rows }, 200, { 'cache-control': 'public, max-age=60' });
+}
+
 async function visitorHash(request, env) {
   // Daily rotating, salted hash of IP + user agent. Enough to count people
   // once per day, useless for identifying anyone, and it expires by itself.
@@ -723,6 +760,7 @@ export async function adminRoutes(request, env, url, email) {
   }
 
   if (p === '/prices' && method === 'GET') {
+    await ensureWebColumn(env);
     const rows = await env.DB.prepare('SELECT * FROM price_list ORDER BY position, id').all();
     return json({ prices: rows.results });
   }
@@ -730,9 +768,13 @@ export async function adminRoutes(request, env, url, email) {
   if (p === '/prices' && method === 'POST') {
     const body = await request.json().catch(() => ({}));
     if (!Array.isArray(body.prices)) return bad('Expected a prices array');
+    await ensureWebColumn(env);
+    // A row sent without `web` keeps whatever it had, so an older tab of the
+    // back office saving prices cannot quietly take everything off the site.
     const stmts = body.prices.map((row) =>
-      env.DB.prepare('UPDATE price_list SET name = ?, description = ?, unit_cents = ?, active = ? WHERE id = ?')
-        .bind(row.name, row.description || null, row.unit_cents ?? null, row.active ? 1 : 0, row.id),
+      env.DB.prepare('UPDATE price_list SET name = ?, description = ?, unit_cents = ?, active = ?, web = COALESCE(?, web) WHERE id = ?')
+        .bind(row.name, row.description || null, row.unit_cents ?? null, row.active ? 1 : 0,
+          row.web === undefined || row.web === null ? null : (row.web ? 1 : 0), row.id),
     );
     if (stmts.length) await env.DB.batch(stmts);
     return json({ ok: true });
@@ -983,6 +1025,10 @@ export default {
       }
       if (path === '/api/e' && request.method === 'POST') {
         const res = await handleBeacon(request, env);
+        return new Response(res.body, { status: res.status, headers: { ...Object.fromEntries(res.headers), ...corsHeaders(env, request) } });
+      }
+      if (path === '/api/prices' && request.method === 'GET') {
+        const res = await handlePublicPrices(env);
         return new Response(res.body, { status: res.status, headers: { ...Object.fromEntries(res.headers), ...corsHeaders(env, request) } });
       }
       if (path === '/api/webhooks/sentoo' && request.method === 'POST') {
