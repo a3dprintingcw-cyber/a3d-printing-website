@@ -566,6 +566,33 @@ await t('a customer can be pinned to a quickbooks card by hand', async () => {
   assert(!cleared.qbo_customer_id, 'unpinning did not work');
 });
 
+// For clearing out test customers: the customer and every order they have go
+// together, nobody else is touched, and QuickBooks is never called.
+await t('deleting a customer takes their orders and nothing else', async () => {
+  const made = await (await A('/orders', { method: 'POST', body: JSON.stringify({ name: 'Test Tessa' }) })).json();
+  await A('/orders/' + made.id + '/quote', {
+    method: 'POST', body: JSON.stringify({ lines: [{ description: 'Thing', qty: 1, unit_cents: 500 }] }),
+  });
+  const order = (await (await A('/orders/' + made.id)).json()).order;
+  const custId = order.customer_id;
+  assert(custId, 'order has no customer id');
+  const before = (await (await A('/customers')).json()).customers.length;
+  const ordersBefore = (await db.prepare('select count(*) n from orders').first()).n;
+  const del = await A('/customers/' + custId, { method: 'DELETE' });
+  const j = await del.json();
+  assert(del.status === 200 && j.orders === 1, 'delete said ' + del.status + ' ' + JSON.stringify(j));
+  assert((await A('/customers/' + custId)).status === 404, 'customer still there');
+  assert((await A('/orders/' + made.id)).status === 404, 'their order is still there');
+  const quotes = await db.prepare('select count(*) n from quotes where order_id = ?').bind(made.id).first();
+  assert(quotes.n === 0, 'quotes left behind: ' + quotes.n);
+  const after = (await (await A('/customers')).json()).customers.length;
+  assert(after === before - 1, 'expected exactly one customer fewer, ' + before + ' -> ' + after);
+  const ordersAfter = (await db.prepare('select count(*) n from orders').first()).n;
+  assert(ordersAfter === ordersBefore - 1, 'other orders were touched, ' + ordersBefore + ' -> ' + ordersAfter);
+  assert((await A('/customers/999999', { method: 'DELETE' })).status === 404, 'unknown customer should 404');
+  assert(ADMIN_HTML.includes('deleteCustomer('), 'no delete button on the customer screens');
+});
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 await mf.dispose();
 process.exit(fail ? 1 : 0);
