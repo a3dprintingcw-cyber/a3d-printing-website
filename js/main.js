@@ -247,10 +247,10 @@
 
   /* ---------------- Form submission (Formspree) ---------------- */
   /* A request that went through replaces the form with a clear confirmation:
-     a big tick, the reference, what happens next, and a way to send another.
+     a big tick, a thank you, what happens next, and a way to send another.
      A one-line status under the button was too easy to miss, above all on a
      phone where the button sits below the fold after you tap it. */
-  function showSent(form, ref, isDev) {
+  function showSent(form, isDev) {
     var panel = document.createElement("div");
     panel.className = "form-sent";
     panel.setAttribute("role", "status");
@@ -259,37 +259,11 @@
       '<div class="form-sent-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17.5 19 7"/></svg></div>' +
       "<h3>Request sent!</h3>" +
       '<p class="form-sent-lead"></p>' +
-      '<p class="form-sent-ref"></p>' +
-      "<p>You'll hear back by email, usually the same day.</p>" +
-      '<p class="form-sent-wa"></p>' +
+      "<p>We'll get back to you by email, usually the same day.</p>" +
       '<button type="button" class="btn btn-outline">Send another request</button>';
     panel.querySelector(".form-sent-lead").textContent = isDev
-      ? "Thanks, we've received your project details."
-      : "Thanks, we've received your quote request.";
-    var refEl = panel.querySelector(".form-sent-ref");
-    if (ref) {
-      refEl.textContent = "Your reference: ";
-      var b = document.createElement("strong");
-      b.textContent = ref;
-      refEl.appendChild(b);
-    } else {
-      refEl.remove();
-    }
-    // Need it sooner: a WhatsApp link that already carries the reference.
-    var wa = panel.querySelector(".form-sent-wa");
-    var num = String(cfg.whatsappNumber || "").replace(/[^0-9]/g, "");
-    if (num) {
-      var a = document.createElement("a");
-      a.href = "https://wa.me/" + num + "?text=" + encodeURIComponent("Hi A3D Printing! About my request" + (ref ? " " + ref : "") + ":");
-      a.target = "_blank";
-      a.rel = "noopener";
-      a.textContent = "Message us on WhatsApp";
-      wa.appendChild(document.createTextNode("Need it sooner? "));
-      wa.appendChild(a);
-      wa.appendChild(document.createTextNode(ref ? " and mention " + ref + "." : "."));
-    } else {
-      wa.remove();
-    }
+      ? "Thank you, we've received your project details."
+      : "Thank you, we've received your quote request.";
     var card = form.parentNode;
     panel.querySelector("button").addEventListener("click", function () {
       panel.remove();
@@ -344,7 +318,7 @@
               form.reset();
               var list = form.querySelector('[id$="file-list"]') || form.querySelector('[id^="file-list"]');
               if (list) list.innerHTML = "";
-              showSent(form, json && json.ref, isDev);
+              showSent(form, isDev);
             });
           }
           return res.json().catch(function () { return {}; }).then(function (json) {
