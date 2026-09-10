@@ -314,13 +314,6 @@ td:first-child { color: var(--ink); font-weight: 600; }
 .divider-or { display: flex; align-items: center; gap: 12px; margin: 22px 0; color: var(--ink-soft); font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
 .divider-or::before, .divider-or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
 
-/* ---------- testimonial placeholder ---------- */
-.testimonial-empty {
-  border: 1px dashed var(--border); border-radius: var(--radius-lg); padding: 48px 24px;
-  text-align: center; color: var(--ink-soft); background: var(--paper-soft);
-}
-.testimonial-empty svg { width: 30px; height: 30px; color: var(--blue); margin: 0 auto 14px; }
-
 /* ---------- about ---------- */
 .about-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; }
 .about-list { list-style: none; margin: 20px 0 0; padding: 0; display: grid; gap: 12px; }
