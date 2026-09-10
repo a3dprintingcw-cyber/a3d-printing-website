@@ -107,9 +107,18 @@ await t('junk submissions are rejected', async () => {
 
 await t('honeypot submissions are swallowed', async () => {
   const r = await mf.dispatchFetch('https://a3dprinting.com/api/quote-request',
-    multipart({ name: 'Bot', email: 'bot@spam.com', company_website: 'http://spam' }));
+    multipart({ name: 'Bot', email: 'bot@spam.com', a3d_trap: 'http://spam' }));
   const j = await r.json();
   assert(j.ref === 'ignored', 'honeypot leaked: ' + JSON.stringify(j));
+});
+
+// Browser autofill used to fill the old trap field, company_website, with the
+// customer's company, and the request was dropped as spam. It must go through.
+await t('an autofilled old trap field no longer drops a real request', async () => {
+  const r = await mf.dispatchFetch('https://a3dprinting.com/api/quote-request',
+    multipart({ name: 'Real Person', email: 'real@svb.cw', company: 'SVB', company_website: 'SVB' }));
+  const j = await r.json();
+  assert(r.status === 200 && /^A3D-\d{4}$/.test(j.ref), 'a real request was dropped: ' + JSON.stringify(j));
 });
 
 await t('forbidden file types are refused', async () => {
