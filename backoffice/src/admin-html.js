@@ -639,12 +639,13 @@ function loadTaxCodes(qb) {
       '<option value="">No tax code</option>';
     for (var i = 0; i < codes.length; i++) {
       h += '<option value="' + esc(codes[i].id) + '"' +
-        (String(r.chosen) === String(codes[i].id) ? ' selected' : '') + '>' + esc(codes[i].name) + '</option>';
+        (String(r.chosen) === String(codes[i].id) ? ' selected' : '') + '>' + esc(codes[i].name) +
+        (codes[i].pct ? ' (' + codes[i].pct + '%)' : '') + '</option>';
     }
     h += '</select></label>' +
       '<p class="muted">Pick the one that matches the OB you are required to charge. ' +
-      'It goes on the QuickBooks estimate and on the invoice that follows it. ' +
-      'If A3D does not charge OB, leave it on <b>No tax code</b>.</p>';
+      'The same rate is added to the quote total here, so what the customer pays and what ' +
+      'QuickBooks invoices are the same number. If A3D does not charge OB, leave it on <b>No tax code</b>.</p>';
     box.innerHTML = h;
   }).catch(function (e) {
     box.innerHTML = '<p class="muted">Could not read your tax codes: ' + esc(e.message) + '</p>';
@@ -654,6 +655,11 @@ function loadTaxCodes(qb) {
 function saveTaxCode() {
   var sel = document.getElementById('qtaxsel');
   api('/qbo/taxcode', { method: 'POST', body: JSON.stringify({ id: sel.value }) })
+    .then(function (r) {
+      alert(r.chosen
+        ? 'Quotes now add ' + (r.pct || 0) + '% ' + (r.name || 'tax') + ', matching QuickBooks.'
+        : 'Quotes now go out with no tax.');
+    })
     .catch(function (e) { alert(e.message); });
 }
 
