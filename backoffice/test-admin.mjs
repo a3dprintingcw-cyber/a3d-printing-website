@@ -438,6 +438,91 @@ await t('OB is charged by default and can be turned off for one quote', async ()
   await db.prepare("update settings set value = '0' where key = 'tax_rate_pct'").run();
 });
 
+// --------------------------------- the back office as a place to work
+
+// Half his customers walk in the door. Before this there was no way to quote
+// them at all: every order had to start life as a website form.
+await t('a walk-in can be added by hand and quoted', async () => {
+  const r = await A('/orders', { method: 'POST', body: JSON.stringify({ name: 'Counter Customer', notes: 'Two brackets' }) });
+  const j = await r.json();
+  assert(r.status === 200, 'http ' + r.status + ' ' + JSON.stringify(j));
+  assert(/^A3D-\d{4}$/.test(j.ref), 'bad ref ' + j.ref);
+  const detail = await (await A('/orders/' + j.id)).json();
+  assert(detail.order.source === 'counter', 'source ' + detail.order.source);
+  assert(detail.order.customer_name === 'Counter Customer', 'name ' + detail.order.customer_name);
+  const quote = await A('/orders/' + j.id + '/quote', {
+    method: 'POST', body: JSON.stringify({ lines: [{ description: 'Bracket', qty: 2, unit_cents: 2500 }] }),
+  });
+  assert(quote.status === 200, 'a walk-in should be quotable, got ' + quote.status);
+});
+
+// The placeholder address exists so the customers table has something to key
+// on. It must never reach a mail server.
+await t('a walk-in without an email is never emailed', async () => {
+  const made = await (await A('/orders', { method: 'POST', body: JSON.stringify({ name: 'No Email Ned' }) })).json();
+  const quoted = await (await A('/orders/' + made.id + '/quote', {
+    method: 'POST', body: JSON.stringify({ lines: [{ description: 'Print', qty: 1, unit_cents: 1000 }] }),
+  })).json();
+  const send = await A('/quotes/' + quoted.quote.id + '/send', { method: 'POST' });
+  assert(send.status === 400, 'expected a refusal, got ' + send.status);
+  const said = await send.json();
+  assert(/no email address/i.test(said.error || ''), 'wrong reason: ' + said.error);
+  assert(/https?:/.test(said.error || ''), 'the pay link should still be handed over: ' + said.error);
+});
+
+// Deleting is for his own test data and mistakes. It has to take the whole
+// order with it, and it must not touch his books.
+await t('deleting an order takes its quotes and history with it', async () => {
+  const made = await (await A('/orders', { method: 'POST', body: JSON.stringify({ name: 'Delete Me' }) })).json();
+  await A('/orders/' + made.id + '/quote', {
+    method: 'POST', body: JSON.stringify({ lines: [{ description: 'Thing', qty: 1, unit_cents: 500 }] }),
+  });
+  const del = await A('/orders/' + made.id, { method: 'DELETE' });
+  assert(del.status === 200, 'delete failed ' + del.status);
+  const gone = await A('/orders/' + made.id);
+  assert(gone.status === 404, 'order should be gone, got ' + gone.status);
+  const quotes = await db.prepare('select count(*) n from quotes where order_id = ?').bind(made.id).first();
+  assert(quotes.n === 0, 'quotes left behind: ' + quotes.n);
+  const events = await db.prepare('select count(*) n from order_events where order_id = ?').bind(made.id).first();
+  assert(events.n === 0, 'events left behind: ' + events.n);
+});
+
+await t('the price list can grow and shrink', async () => {
+  const before = (await (await A('/prices')).json()).prices.length;
+  const added = await (await A('/prices/add', { method: 'POST', body: JSON.stringify({ name: 'Test widget' }) })).json();
+  assert(added.price && added.price.id, 'no row came back');
+  const mid = (await (await A('/prices')).json()).prices;
+  assert(mid.length === before + 1, 'expected one more, got ' + mid.length);
+  assert(mid.some((p) => p.name === 'Test widget'), 'the new item is missing');
+  const del = await A('/prices/' + added.price.id, { method: 'DELETE' });
+  assert(del.status === 200, 'delete failed ' + del.status);
+  const after = (await (await A('/prices')).json()).prices.length;
+  assert(after === before, 'expected ' + before + ' again, got ' + after);
+});
+
+await t('a customer page shows their orders and what they have paid', async () => {
+  const list = (await (await A('/customers')).json()).customers;
+  assert(list.length, 'no customers to look at');
+  const r = await A('/customers/' + list[0].id);
+  assert(r.status === 200, 'http ' + r.status);
+  const d = await r.json();
+  assert(d.customer && d.customer.id === list[0].id, 'wrong customer came back');
+  assert(Array.isArray(d.orders), 'orders should be a list');
+  assert(typeof d.paidCents === 'number', 'paidCents should be a number');
+});
+
+await t('a customer can be pinned to a quickbooks card by hand', async () => {
+  const list = (await (await A('/customers')).json()).customers;
+  const id = list[0].id;
+  const r = await A('/customers/' + id + '/qbo', { method: 'POST', body: JSON.stringify({ qbo_customer_id: '42' }) });
+  assert(r.status === 200, 'http ' + r.status);
+  const row = await db.prepare('select qbo_customer_id from customers where id = ?').bind(id).first();
+  assert(row.qbo_customer_id === '42', 'not pinned, got ' + row.qbo_customer_id);
+  await A('/customers/' + id + '/qbo', { method: 'POST', body: JSON.stringify({ qbo_customer_id: '' }) });
+  const cleared = await db.prepare('select qbo_customer_id from customers where id = ?').bind(id).first();
+  assert(!cleared.qbo_customer_id, 'unpinning did not work');
+});
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 await mf.dispose();
 process.exit(fail ? 1 : 0);
