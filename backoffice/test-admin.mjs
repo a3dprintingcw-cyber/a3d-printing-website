@@ -305,12 +305,6 @@ await t('a callback with the wrong state is thrown away', async () => {
   assert(r.headers.get('location').includes('error='), 'should have refused');
 });
 
-await t('quickbooks disconnect clears every trace', async () => {
-  await A('/qbo/disconnect', { method: 'POST' });
-  const rows = await db.prepare("select key from settings where key like 'qbo_%'").all();
-  assert(rows.results.length === 0, 'left behind: ' + rows.results.map(r => r.key).join(','));
-});
-
 // The back office UI is one long template string, so a syntax error inside it
 // sails through every check the module system does and only shows up as a page
 // stuck on "Loading...". Parse the inline script for real, every run.
@@ -377,6 +371,10 @@ await t('the oauth state parameter is what defends the callback', async () => {
   await A('/qbo/disconnect', { method: 'POST' });
 });
 
+// Disconnect must take every credential with it. The cached copy of Intuit's
+// public discovery document is deliberately exempt: it is not user data, not a
+// secret, and not tied to the connection, so re-connecting should not have to
+// fetch it again.
 await t('disconnect leaves no quickbooks trace at all', async () => {
   await db.prepare("insert into settings (key, value) values ('qbo_access_token','x') on conflict(key) do update set value = excluded.value").run();
   await db.prepare("insert into settings (key, value) values ('qbo_needs_reconnect','1') on conflict(key) do update set value = excluded.value").run();
