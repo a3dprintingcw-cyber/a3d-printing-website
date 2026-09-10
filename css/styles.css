@@ -333,12 +333,7 @@ td:first-child { color: var(--ink); font-weight: 600; }
 .form-sent h3 { font-size: 26px; margin: 0 0 8px; }
 .form-sent p { color: var(--ink-soft); margin: 0 auto 10px; max-width: 420px; }
 .form-sent .form-sent-lead { color: var(--ink); font-weight: 600; }
-.form-sent-ref strong {
-  display: inline-block; margin-left: 4px; padding: 3px 10px; border-radius: 999px;
-  font-size: 16px; letter-spacing: .02em; color: var(--ink); background: var(--paper-soft); border: 1px solid var(--border);
-}
 .form-sent .btn { margin-top: 12px; }
-.form-sent-wa a { color: var(--blue); font-weight: 600; }
 /* Once sent, "or send via WhatsApp instead" no longer makes sense. */
 .form-card.is-sent > .divider-or, .form-card.is-sent > .btn-whatsapp,
 .form-card.is-sent > p.hint, .form-card.is-sent > .setup-banner { display: none; }
