@@ -192,6 +192,7 @@ async function syncEstimate(env, quoteId) {
       ref: order.ref,
       validUntil: quote.valid_until,
       currency: conf.currency || null,
+      taxCode: conf.taxCode || null,
       customerEmail: customer.email,
     });
     await env.DB.prepare('UPDATE quotes SET qbo_estimate_id = ?, qbo_estimate_no = ?, qbo_error = NULL WHERE id = ?')
@@ -299,6 +300,7 @@ export async function adminRoutes(request, env, url, email) {
         connected: Boolean(qc.clientId && qc.clientSecret && qc.refreshToken && qc.realmId),
         hasApp: Boolean(qc.clientId && qc.clientSecret),
         company: qc.company, currency: qc.currency, sandbox: qc.sandbox,
+        taxPerLine: qc.taxPerLine, taxCode: qc.taxCode, taxCodeName: qc.taxCodeName,
         needsReconnect: qc.needsReconnect,
       },
     });
@@ -431,10 +433,41 @@ export async function adminRoutes(request, env, url, email) {
       const info = await qbo.companyInfo(env, now);
       await setSetting(env, 'qbo_company', info.name);
       await setSetting(env, 'qbo_currency', info.currency);
+      await setSetting(env, 'qbo_tax_per_line', info.taxPerLine ? '1' : '0');
     } catch (e) {
       return done(e.message, false);
     }
     return done('', true);
+  }
+
+  // The owner picks his own tax code because only he knows whether A3D charges
+  // OB, and at what rate. Guessing here would put a wrong number on a real
+  // invoice, which is worse than putting none on at all.
+  if (p === '/qbo/taxcodes' && method === 'GET') {
+    const conf = await qbo.qboConfig(env);
+    if (!conf.realmId) return bad('Connect QuickBooks first.');
+    try {
+      return json({ codes: await qbo.taxCodes(env, conf), chosen: conf.taxCode || '' });
+    } catch (e) {
+      return bad(e.message);
+    }
+  }
+
+  if (p === '/qbo/taxcode' && method === 'POST') {
+    const body = await req.json().catch(() => ({}));
+    const id = String(body.id || '');
+    if (!id) {
+      await setSetting(env, 'qbo_tax_code', null);
+      await setSetting(env, 'qbo_tax_code_name', null);
+      return json({ ok: true, chosen: '' });
+    }
+    const conf = await qbo.qboConfig(env);
+    const codes = await qbo.taxCodes(env, conf).catch(() => []);
+    const hit = codes.find((c) => c.id === id);
+    if (!hit) return bad('QuickBooks does not have that tax code.');
+    await setSetting(env, 'qbo_tax_code', hit.id);
+    await setSetting(env, 'qbo_tax_code_name', hit.name);
+    return json({ ok: true, chosen: hit.id, name: hit.name });
   }
 
   if (p === '/qbo/disconnect' && method === 'POST') {
@@ -443,6 +476,7 @@ export async function adminRoutes(request, env, url, email) {
     const revoked = await qbo.revokeToken(env).catch(() => false);
     for (const k of ['qbo_client_id', 'qbo_client_secret', 'qbo_refresh_token', 'qbo_realm_id',
       'qbo_sandbox', 'qbo_company', 'qbo_currency', 'qbo_oauth_state',
+      'qbo_tax_per_line', 'qbo_tax_code', 'qbo_tax_code_name',
       'qbo_access_token', 'qbo_access_expires', 'qbo_needs_reconnect']) {
       await setSetting(env, k, null);
     }
