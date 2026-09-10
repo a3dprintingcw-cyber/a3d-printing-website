@@ -383,6 +383,30 @@ await t('disconnect leaves no quickbooks trace at all', async () => {
   assert(rows.results.length === 0, 'left behind: ' + rows.results.map(r => r.key).join(','));
 });
 
+// Curaçao runs QuickBooks' global tax model, where a sales line without a tax
+// code is rejected. The code the owner picks has to reach every line, and
+// picking nothing has to stay a real option for a company that charges no OB.
+await t('the chosen tax code lands on every quote line', async () => {
+  const qbo = await import('./src/qbo.js');
+  const lines = [{ description: 'Print', qty: 2, unit_cents: 1500 }, { description: 'Design', qty: 1, unit_cents: 5000 }];
+  const withTax = qbo.toLines(lines, '7');
+  assert(withTax.length === 2, 'both lines expected');
+  for (const l of withTax) {
+    const ref = l.SalesItemLineDetail.TaxCodeRef;
+    assert(ref && ref.value === '7', 'missing tax code on ' + l.Description);
+  }
+  assert(withTax[0].Amount === 30, 'amount should be 30.00, got ' + withTax[0].Amount);
+  const bare = qbo.toLines(lines, null);
+  assert(!bare[0].SalesItemLineDetail.TaxCodeRef, 'no code chosen means no code sent');
+});
+
+await t('a tax code QuickBooks does not have is refused', async () => {
+  const r = await A('/qbo/taxcode', { method: 'POST', body: JSON.stringify({ id: 'made-up' }) });
+  assert(r.status >= 400, 'expected a refusal, got ' + r.status);
+  const row = await db.prepare("select value from settings where key = 'qbo_tax_code'").first();
+  assert(!row || !row.value, 'nothing should have been stored');
+});
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 await mf.dispose();
 process.exit(fail ? 1 : 0);
