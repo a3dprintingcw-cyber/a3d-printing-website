@@ -96,6 +96,8 @@ export const ADMIN_HTML = String.raw`<!doctype html>
     border:1px solid var(--border); background:var(--paper); color:var(--ink-soft); font-size:13px; }
   .lines .lt { font-variant-numeric:tabular-nums; color:var(--ink); }
   .qsum { margin-top:12px; padding-top:12px; border-top:1px solid var(--border); max-width:340px; margin-left:auto; }
+  .obline { display:flex; align-items:center; gap:8px; margin-top:12px; font-size:13px; flex-wrap:wrap; }
+  .obline input { width:auto; margin:0; }
   .qrow { display:flex; justify-content:space-between; gap:20px; padding:3px 0; color:var(--ink-soft); font-size:14px; }
   .qrow b { color:var(--ink); font-variant-numeric:tabular-nums; }
   .qrow.total { border-top:1px solid var(--border); margin-top:6px; padding-top:8px; font-size:17px; color:var(--ink); }
@@ -335,6 +337,10 @@ function orderDetail(id) {
       '<th style="width:120px">Price each</th><th style="width:120px;text-align:right">Line</th><th style="width:34px"></th>' +
       '</tr></thead><tbody></tbody></table>' +
       '<div class="bar" style="margin-top:10px"><button onclick="addLine()">Add line</button></div>' +
+      (TAX_PCT
+        ? '<label class="obline"><input type="checkbox" id="qob" checked onchange="recalc()"> ' +
+          'Charge OB ' + TAX_PCT + '%<span class="muted"> (untick it for a private customer you do not bill tax to)</span></label>'
+        : '') +
       '<div id="qsum" class="qsum"></div>' +
       '<div class="bar" style="margin-top:14px">' +
       '<button class="primary" onclick="saveQuote(' + o.id + ')">Create quote and payment link</button></div></div>';
@@ -436,13 +442,18 @@ function recalc() {
       cell.textContent = '-';
     }
   }
-  var tax = Math.round((subtotal * TAX_PCT) / 100);
+  var ob = document.getElementById('qob');
+  var pct = (ob && !ob.checked) ? 0 : TAX_PCT;
+  var tax = Math.round((subtotal * pct) / 100);
   var el = document.getElementById('qsum');
   if (!el) return;
   var html = '';
-  if (TAX_PCT) {
+  if (pct) {
     html += '<div class="qrow"><span>Subtotal</span><b>' + money(subtotal) + '</b></div>' +
-      '<div class="qrow"><span>Tax ' + TAX_PCT + '%</span><b>' + money(tax) + '</b></div>';
+      '<div class="qrow"><span>OB ' + pct + '%</span><b>' + money(tax) + '</b></div>';
+  } else if (TAX_PCT) {
+    html += '<div class="qrow"><span>Subtotal</span><b>' + money(subtotal) + '</b></div>' +
+      '<div class="qrow"><span>OB</span><b>not charged</b></div>';
   }
   html += '<div class="qrow total"><span>Total</span><b>' + money(subtotal + tax) + '</b></div>';
   if (unnamed) {
@@ -459,7 +470,11 @@ function saveQuote(id) {
   if (all.length !== lines.length) {
     if (!confirm('Some lines have a price but no name and will be left out. Create the quote anyway?')) return;
   }
-  api('/orders/' + id + '/quote', { method: 'POST', body: JSON.stringify({ lines: lines }) })
+  var ob = document.getElementById('qob');
+  var charging = !ob || ob.checked;
+  if (TAX_PCT && !charging &&
+      !confirm('This quote goes out with no OB on it. Only do that for a customer you are not required to charge. Carry on?')) return;
+  api('/orders/' + id + '/quote', { method: 'POST', body: JSON.stringify({ lines: lines, tax: charging }) })
     .then(function (r) {
       var msg = 'Quote created for ' + money(r.quote.total_cents) + '.';
       if (r.payment && r.payment.error) msg += ' Payment link failed: ' + r.payment.error;
