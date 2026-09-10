@@ -419,6 +419,25 @@ await t('clearing the tax code takes the quote tax rate with it', async () => {
   assert(row.value === '0', 'tax rate should be back to 0, is ' + row.value);
 });
 
+// Adrian charges OB to companies and not to a friend doing a one-off, so the
+// tax is a decision per quote. Getting this wrong in either direction is real
+// money: tax he collected but did not owe, or tax he owes but never collected.
+await t('OB is charged by default and can be turned off for one quote', async () => {
+  await db.prepare("insert into settings (key, value) values ('tax_rate_pct','6') on conflict(key) do update set value = excluded.value").run();
+  const line = [{ description: 'Bracket', qty: 2, unit_cents: 5000 }];
+
+  const on = await (await A('/orders/1/quote', { method: 'POST', body: JSON.stringify({ lines: line }) })).json();
+  assert(on.quote.subtotal_cents === 10000, 'subtotal ' + on.quote.subtotal_cents);
+  assert(on.quote.tax_cents === 600, 'expected 600 of tax, got ' + on.quote.tax_cents);
+  assert(on.quote.total_cents === 10600, 'total ' + on.quote.total_cents);
+
+  const off = await (await A('/orders/1/quote', { method: 'POST', body: JSON.stringify({ lines: line, tax: false }) })).json();
+  assert(off.quote.tax_cents === 0, 'no tax expected, got ' + off.quote.tax_cents);
+  assert(off.quote.total_cents === 10000, 'total ' + off.quote.total_cents);
+
+  await db.prepare("update settings set value = '0' where key = 'tax_rate_pct'").run();
+});
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 await mf.dispose();
 process.exit(fail ? 1 : 0);
