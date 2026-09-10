@@ -64,6 +64,7 @@ export async function qboConfig(env) {
     'qbo_client_id', 'qbo_client_secret', 'qbo_refresh_token',
     'qbo_realm_id', 'qbo_sandbox', 'qbo_company', 'qbo_currency',
     'qbo_access_token', 'qbo_access_expires', 'qbo_needs_reconnect',
+    'qbo_tax_per_line', 'qbo_tax_code', 'qbo_tax_code_name',
   ]).catch(() => ({}));
   return {
     clientId: env.QBO_CLIENT_ID || s.qbo_client_id || '',
@@ -73,6 +74,9 @@ export async function qboConfig(env) {
     sandbox: s.qbo_sandbox === '1',
     company: s.qbo_company || '',
     currency: s.qbo_currency || '',
+    taxPerLine: s.qbo_tax_per_line === '1',
+    taxCode: s.qbo_tax_code || '',
+    taxCodeName: s.qbo_tax_code_name || '',
     cachedToken: s.qbo_access_token || '',
     cachedExpires: Number(s.qbo_access_expires || 0),
     needsReconnect: s.qbo_needs_reconnect === '1',
@@ -267,14 +271,46 @@ function q(value) {
   return String(value).replace(/'/g, "\\'");
 }
 
+/**
+ * CompanyInfo carries the name and the country but not the money. The home
+ * currency, and whether this company is even allowed to raise a document in
+ * anything else, live in Preferences, so both are read here. Getting this
+ * wrong is not cosmetic: sending a CurrencyRef the company does not know is
+ * rejected outright, and the estimate never gets made.
+ */
 export async function companyInfo(env, conf) {
   const j = await api(env, conf, '/companyinfo/' + conf.realmId);
   const c = j.CompanyInfo || {};
+  const prefs = await preferences(env, conf).catch(() => ({}));
   return {
     name: c.CompanyName || '',
     country: c.Country || '',
-    currency: (c.Currency && c.Currency.value) || '',
+    currency: prefs.currency || '',
+    multiCurrency: !!prefs.multiCurrency,
+    taxPerLine: !!prefs.taxPerLine,
   };
+}
+
+export async function preferences(env, conf) {
+  const j = await api(env, conf, '/preferences');
+  const p = (j.Preferences) || {};
+  const cur = p.CurrencyPrefs || {};
+  const tax = p.TaxPrefs || {};
+  return {
+    currency: (cur.HomeCurrency && cur.HomeCurrency.value) || '',
+    multiCurrency: !!cur.MultiCurrencyEnabled,
+    taxPerLine: !!tax.UsingSalesTax,
+    defaultTaxCode: (tax.PartnerTaxEnabled && tax.TaxGroupCodeRef && tax.TaxGroupCodeRef.value) || '',
+  };
+}
+
+/** The tax codes this company actually has, so the owner picks one instead of guessing. */
+export async function taxCodes(env, conf) {
+  const j = await api(env, conf, '/query?query=' + encodeURIComponent('select * from TaxCode maxresults 100'));
+  const rows = (j.QueryResponse && j.QueryResponse.TaxCode) || [];
+  return rows
+    .filter((t) => t.Active !== false)
+    .map((t) => ({ id: String(t.Id), name: t.Name || String(t.Id), taxable: t.Taxable !== false }));
 }
 
 /**
@@ -304,7 +340,14 @@ export async function findOrCreateCustomer(env, conf, { name, email, phone }) {
   return created.Customer.Id;
 }
 
-function toLines(lines, currency) {
+/**
+ * Companies outside the US and Canada run QuickBooks' global tax model, where
+ * every sales line has to name a tax code. Curaçao is one of them. When the
+ * owner has picked a code we stamp it on each line; when he has not, the line
+ * goes out bare and QuickBooks decides, which is fine for a company that does
+ * not charge tax at all.
+ */
+export function toLines(lines, taxCode) {
   return lines.map((l) => ({
     DetailType: 'SalesItemLineDetail',
     Description: l.description,
@@ -312,6 +355,7 @@ function toLines(lines, currency) {
     SalesItemLineDetail: {
       Qty: l.qty,
       UnitPrice: l.unit_cents / 100,
+      ...(taxCode ? { TaxCodeRef: { value: taxCode } } : {}),
     },
   }));
 }
@@ -320,10 +364,10 @@ function toLines(lines, currency) {
  * The estimate is the customer-facing quotation. QuickBooks numbers it, so
  * the number on the email and the number in his books are the same one.
  */
-export async function createEstimate(env, conf, { customerId, lines, ref, validUntil, currency, customerEmail }) {
+export async function createEstimate(env, conf, { customerId, lines, ref, validUntil, currency, customerEmail, taxCode }) {
   const body = {
     CustomerRef: { value: customerId },
-    Line: toLines(lines, currency),
+    Line: toLines(lines, taxCode),
     CustomerMemo: { value: 'A3D reference ' + ref },
     ...(validUntil ? { ExpirationDate: String(validUntil).slice(0, 10) } : {}),
     ...(customerEmail ? { BillEmail: { Address: customerEmail } } : {}),
