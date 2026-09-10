@@ -307,7 +307,45 @@ td:first-child { color: var(--ink); font-weight: 600; }
 
 .form-status { margin-top: 14px; font-size: 14px; font-weight: 600; display: none; }
 .form-status.ok { color: #17a34a; display: block; }
-.form-status.err { color: #dc2626; display: block; }
+.form-status.err {
+  display: block; color: #dc2626; padding: 12px 14px; border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, #dc2626 45%, transparent);
+  background: color-mix(in srgb, #dc2626 10%, transparent);
+}
+
+/* Sending: the button says so and shows it is busy, so nobody taps twice. */
+.btn.is-sending { opacity: .85; cursor: progress; }
+.btn-spinner {
+  display: inline-block; width: 16px; height: 16px; margin-right: 8px; vertical-align: -3px;
+  border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+  animation: btn-spin .7s linear infinite;
+}
+@keyframes btn-spin { to { transform: rotate(360deg); } }
+
+/* Sent: the form gives way to a confirmation nobody can miss. */
+.form-sent { text-align: center; padding: 18px 6px 6px; outline: none; animation: sent-in .35s ease-out; }
+.form-sent-icon {
+  width: 72px; height: 72px; margin: 0 auto 16px; border-radius: 50%;
+  display: grid; place-items: center; color: #fff; background: #17a34a;
+  box-shadow: 0 0 0 8px color-mix(in srgb, #17a34a 18%, transparent);
+}
+.form-sent-icon svg { width: 36px; height: 36px; }
+.form-sent h3 { font-size: 26px; margin: 0 0 8px; }
+.form-sent p { color: var(--ink-soft); margin: 0 auto 10px; max-width: 420px; }
+.form-sent .form-sent-lead { color: var(--ink); font-weight: 600; }
+.form-sent-ref strong {
+  display: inline-block; margin-left: 4px; padding: 3px 10px; border-radius: 999px;
+  font-size: 16px; letter-spacing: .02em; color: var(--ink); background: var(--paper-soft); border: 1px solid var(--border);
+}
+.form-sent .btn { margin-top: 12px; }
+.form-sent-wa a { color: var(--blue); font-weight: 600; }
+/* Once sent, "or send via WhatsApp instead" no longer makes sense. */
+.form-card.is-sent > .divider-or, .form-card.is-sent > .btn-whatsapp,
+.form-card.is-sent > p.hint, .form-card.is-sent > .setup-banner { display: none; }
+@keyframes sent-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .form-sent, .btn-spinner { animation: none; }
+}
 
 .quote-side .card { margin-bottom: 16px; }
 .quote-side .card:last-child { margin-bottom: 0; }
