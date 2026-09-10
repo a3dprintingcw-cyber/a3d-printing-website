@@ -336,27 +336,73 @@ export async function taxCodes(env, conf) {
  * Matches on email first, because two people really can share a name, and
  * falls back to the display name. Creates the customer when neither hits.
  */
-export async function findOrCreateCustomer(env, conf, { name, email, phone }) {
+/** Runs a Customer query and hands back the rows, or an empty list. */
+async function customerQuery(env, conf, where) {
+  const j = await api(env, conf,
+    '/query?query=' + encodeURIComponent('select Id, DisplayName, PrimaryEmailAddr from Customer where ' + where + ' maxresults 20'));
+  return (j.QueryResponse && j.QueryResponse.Customer) || [];
+}
+
+/** Customers whose name looks like `term`, for the picker in the back office. */
+export async function searchCustomers(env, conf, term) {
+  const t = String(term || '').trim();
+  if (t.length < 2) return [];
+  const rows = await customerQuery(env, conf, "DisplayName LIKE '%" + q(t) + "%'");
+  return rows.map((c) => ({
+    id: String(c.Id),
+    name: c.DisplayName || String(c.Id),
+    email: (c.PrimaryEmailAddr && c.PrimaryEmailAddr.Address) || '',
+  }));
+}
+
+/**
+ * Finds the customer in QuickBooks, or makes one.
+ *
+ * The order matters, and so does where it stops. Email is the only truly
+ * reliable key, so it goes first. Then the name, ignoring case and spacing,
+ * because "papagayo hotel" and "Papagayo Hotel" are one business.
+ *
+ * Then one careful guess: the distinctive first word of the name, but only
+ * when exactly one customer in the whole company matches it. "Papagayo Hotel"
+ * finds an existing "Papagayo Kira"; "Jan Thiel Rentals" would find two Jans
+ * and give up rather than pick. Guessing wrong here merges two real customers'
+ * histories, so one match or nothing.
+ *
+ * `hint` is a QuickBooks id the owner picked by hand. It always wins.
+ */
+export async function findOrCreateCustomer(env, conf, { name, email, phone, hint }) {
+  if (hint) return String(hint);
+
   if (email) {
-    const byEmail = await api(env, conf,
-      "/query?query=" + encodeURIComponent("select Id, DisplayName from Customer where PrimaryEmailAddr = '" + q(email) + "'"));
-    const hit = byEmail.QueryResponse && byEmail.QueryResponse.Customer;
-    if (hit && hit.length) return hit[0].Id;
+    const rows = await customerQuery(env, conf, "PrimaryEmailAddr = '" + q(email) + "'");
+    if (rows.length) return String(rows[0].Id);
   }
-  const byName = await api(env, conf,
-    "/query?query=" + encodeURIComponent("select Id, DisplayName from Customer where DisplayName = '" + q(name) + "'"));
-  const hit = byName.QueryResponse && byName.QueryResponse.Customer;
-  if (hit && hit.length) return hit[0].Id;
+
+  const clean = String(name || '').trim();
+  if (clean) {
+    const exact = await customerQuery(env, conf, "DisplayName = '" + q(clean) + "'");
+    if (exact.length) return String(exact[0].Id);
+
+    const loose = await customerQuery(env, conf, "DisplayName LIKE '%" + q(clean) + "%'");
+    const same = loose.filter((c) => String(c.DisplayName || '').trim().toLowerCase() === clean.toLowerCase());
+    if (same.length === 1) return String(same[0].Id);
+
+    const word = clean.split(/[\s,]+/).filter((w) => w.length >= 4)[0];
+    if (word && word.toLowerCase() !== clean.toLowerCase()) {
+      const near = await customerQuery(env, conf, "DisplayName LIKE '%" + q(word) + "%'");
+      if (near.length === 1) return String(near[0].Id);
+    }
+  }
 
   const created = await api(env, conf, '/customer', {
     method: 'POST',
     body: {
-      DisplayName: name,
+      DisplayName: clean || 'Customer',
       ...(email ? { PrimaryEmailAddr: { Address: email } } : {}),
       ...(phone ? { PrimaryPhone: { FreeFormNumber: phone } } : {}),
     },
   });
-  return created.Customer.Id;
+  return String(created.Customer.Id);
 }
 
 /**
