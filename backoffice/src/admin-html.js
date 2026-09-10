@@ -72,7 +72,9 @@ export const ADMIN_HTML = String.raw`<!doctype html>
   button.primary { background:var(--blue); border-color:transparent; color:#fff; }
   button.ghost { background:transparent; }
   button:hover { filter:brightness(1.05); }
-  .grid2 { display:grid; grid-template-columns:1.4fr 1fr; gap:22px; align-items:start; }
+  /* minmax(0,...) so a wide table inside scrolls in its own box instead of
+     stretching the column and the page with it. */
+  .grid2 { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,1fr); gap:22px; align-items:start; }
   .card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px; }
   .kv { display:grid; grid-template-columns:110px 1fr; gap:6px 12px; font-size:14px; }
   .kv dt { color:var(--ink-soft); }
@@ -104,7 +106,7 @@ export const ADMIN_HTML = String.raw`<!doctype html>
     .nav::-webkit-scrollbar { display:none; }
     .nav a { padding:7px 13px; font-size:13.5px; white-space:nowrap; }
     .side .who { margin-top:8px; font-size:11px; }
-    .grid2 { grid-template-columns:1fr; }
+    .grid2 { grid-template-columns:minmax(0,1fr); }
     main { padding:16px 14px 60px; }
     h1 { font-size:20px; }
     .card { padding:14px 15px; }
@@ -709,17 +711,18 @@ function addNote(id) {
 
 // ------------------------------------------------------------- customers
 function customers() {
-  api('/customers').then(function (d) {
+  return api('/customers').then(function (d) {
     var html = '<h1>Customers</h1><p class="sub">Everyone who has ever asked for something.</p>';
     if (!d.customers.length) {
       view.innerHTML = html + empty('No customers yet', 'The first website enquiry creates one.');
       return;
     }
-    html += '<div class="scroll"><table><tr><th>Name</th><th>Email</th><th>Phone</th><th class="right">Orders</th><th>Last order</th></tr>';
+    html += '<div class="scroll"><table><tr><th>Name</th><th>Email</th><th>Phone</th><th class="right">Orders</th><th>Last order</th><th style="width:40px"></th></tr>';
     d.customers.forEach(function (c) {
       html += '<tr class="row" onclick="location.hash=\'#/customer/' + c.id + '\'"><td><b>' + esc(c.name) + '</b></td><td>' +
         esc(shownEmail(c.email)) + '</td><td>' + esc(c.phone || '-') +
-        '</td><td class="right">' + c.orders + '</td><td class="muted">' + (c.last_order ? ago(c.last_order) : '-') + '</td></tr>';
+        '</td><td class="right">' + c.orders + '</td><td class="muted">' + (c.last_order ? ago(c.last_order) : '-') + '</td>' +
+        '<td><button class="ghost" title="Delete this customer" onclick="event.stopPropagation();deleteCustomer(' + c.id + ')">&times;</button></td></tr>';
     });
     html += '</table></div>';
     view.innerHTML = html;
@@ -752,9 +755,31 @@ function customerDetail(id) {
         ? '<a class="linkish" href="https://wa.me/' + esc(String(c.phone).replace(/[^0-9]/g, '')) + '">' + esc(c.phone) + '</a>'
         : '-') + '</dd>' +
       '<dt>Company</dt><dd>' + esc(c.company || '-') + '</dd>' +
-      '<dt>Paid so far</dt><dd><b>' + money(d.paidCents) + '</b></dd></dl></div></div></div>';
+      '<dt>Paid so far</dt><dd><b>' + money(d.paidCents) + '</b></dd></dl>' +
+      '<div class="bar" style="margin:16px 0 0"><button class="danger" onclick="deleteCustomer(' + c.id + ')">Delete customer</button></div>' +
+      '</div></div></div>';
     view.innerHTML = html;
   }).catch(showError);
+}
+
+// Looks the customer up first so the confirmation can say exactly what goes:
+// how many orders, and a louder warning if any of them were actually paid.
+function deleteCustomer(id) {
+  api('/customers/' + id).then(function (d) {
+    var c = d.customer, n = d.orders.length;
+    var msg = 'Delete ' + c.name + ' for good?';
+    if (n) msg += '\n\nTheir ' + n + (n === 1 ? ' order goes' : ' orders go') + ' too, with all quotes, files and history.';
+    if (d.paidCents > 0) msg += '\n\nCareful: this customer has paid ' + money(d.paidCents) + '. That payment record disappears from the back office.';
+    msg += '\n\nAnything already in QuickBooks stays there.';
+    if (!confirm(msg)) return;
+    return fetch('/api/admin/customers/' + id, { method: 'DELETE' }).then(function (r) {
+      if (!r.ok) return r.json().then(function (j) { throw new Error(j.error || 'Could not delete them'); });
+      // Back to the list without a hashchange, so the list renders once and
+      // the confirmation banner lands on it instead of on the page just left.
+      if (location.hash !== '#/customers') { history.pushState(null, '', '#/customers'); setNav('customers'); }
+      return customers().then(function () { flashOnce(c.name + ' deleted.'); });
+    });
+  }).catch(function (e) { alert(e.message); });
 }
 
 // ---------------------------------------------------------------- prices
