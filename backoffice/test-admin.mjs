@@ -402,9 +402,21 @@ await t('the chosen tax code lands on every quote line', async () => {
 
 await t('a tax code QuickBooks does not have is refused', async () => {
   const r = await A('/qbo/taxcode', { method: 'POST', body: JSON.stringify({ id: 'made-up' }) });
-  assert(r.status >= 400, 'expected a refusal, got ' + r.status);
+  assert(r.status === 400, 'expected a plain refusal, got ' + r.status);
+  const said = await r.json();
+  assert(/does not have that tax code/.test(said.error || ''), 'wrong reason: ' + said.error);
   const row = await db.prepare("select value from settings where key = 'qbo_tax_code'").first();
   assert(!row || !row.value, 'nothing should have been stored');
+});
+
+// One number, one place. If the quote charged a rate the QuickBooks invoice did
+// not, the customer would pay one total while the books expected another.
+await t('clearing the tax code takes the quote tax rate with it', async () => {
+  await db.prepare("update settings set value = '6' where key = 'tax_rate_pct'").run();
+  const r = await A('/qbo/taxcode', { method: 'POST', body: JSON.stringify({ id: '' }) });
+  assert(r.status === 200, 'expected 200, got ' + r.status);
+  const row = await db.prepare("select value from settings where key = 'tax_rate_pct'").first();
+  assert(row.value === '0', 'tax rate should be back to 0, is ' + row.value);
 });
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
