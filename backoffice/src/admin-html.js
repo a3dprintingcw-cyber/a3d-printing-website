@@ -90,7 +90,9 @@ export const ADMIN_HTML = String.raw`<!doctype html>
   .scroll table { min-width:520px; }
   @media (max-width:820px) {
     body { overflow-x:hidden; }
-    .layout { grid-template-columns:1fr; }
+    /* auto 1fr, or the grid splits the screen and the top bar grows into a
+       half-empty panel that pushes the actual work below the fold. */
+    .layout { grid-template-columns:1fr; grid-template-rows:auto 1fr; }
     .side { position:sticky; top:0; z-index:20; padding:10px 12px 8px;
             border-right:none; border-bottom:1px solid var(--border);
             background:var(--paper-soft); }
