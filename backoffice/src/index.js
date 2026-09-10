@@ -192,7 +192,9 @@ async function syncEstimate(env, quoteId) {
       ref: order.ref,
       validUntil: quote.valid_until,
       currency: conf.currency || null,
-      taxCode: conf.taxCode || null,
+      // A quote that charges no OB must not carry the OB code into QuickBooks
+      // either, or the books would show tax the customer was never asked for.
+      taxCode: quote.tax_cents > 0 ? (conf.taxCode || null) : null,
       customerEmail: customer.email,
     });
     await env.DB.prepare('UPDATE quotes SET qbo_estimate_id = ?, qbo_estimate_no = ?, qbo_error = NULL WHERE id = ?')
@@ -653,7 +655,12 @@ export async function adminRoutes(request, env, url, email) {
     if (!order) return bad('No such order', 404);
 
     const subtotal = lines.reduce((sum, l) => sum + Math.round(l.qty * l.unit_cents), 0);
-    const taxPct = Number((await env.DB.prepare("SELECT value FROM settings WHERE key = 'tax_rate_pct'").first())?.value || 0);
+    // OB is charged per quote, not per business. A company gets the 6%; a
+    // friend doing a one-off does not. The default is to charge it, because
+    // forgetting to add tax is the mistake that costs money later.
+    const taxPct = body.tax === false
+      ? 0
+      : Number((await env.DB.prepare("SELECT value FROM settings WHERE key = 'tax_rate_pct'").first())?.value || 0);
     const tax = Math.round((subtotal * taxPct) / 100);
     const total = subtotal + tax;
     const days = Number((await env.DB.prepare("SELECT value FROM settings WHERE key = 'quote_validity_days'").first())?.value || 14);
