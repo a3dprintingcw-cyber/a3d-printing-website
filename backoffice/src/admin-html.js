@@ -105,6 +105,9 @@ export const ADMIN_HTML = String.raw`<!doctype html>
   .steps code.copy { background:var(--card); padding:3px 8px; border-radius:6px; font-size:13px; }
   .steps code.copy.copied { outline:2px solid var(--blue); }
   button.small { padding:4px 10px; font-size:13px; }
+  label.inline { display:flex; align-items:center; gap:10px; margin:14px 0 6px; font-size:13px; color:var(--ink-soft); }
+  label.inline select { padding:8px 10px; border-radius:9px; border:1px solid var(--border);
+    background:var(--paper); color:var(--ink); font-size:14px; }
   #view .card + .card { margin-top:16px; }
   .form label { display:block; margin:10px 0; font-size:13px; color:var(--ink-soft); }
   .form label.check { display:flex; align-items:center; gap:8px; margin-top:14px; }
@@ -588,6 +591,7 @@ function settings() {
         (qb.sandbox ? ' <span style="color:var(--warn)">(sandbox company, not your real books)</span>' : '') + '.</p>' +
         '<p class="muted">Building a quote creates the estimate in QuickBooks and attaches its PDF to the email. ' +
         'When the payment lands, that estimate becomes an invoice with the payment recorded against it.</p>' +
+        '<div id="qtax"><p class="muted">Checking how your books handle tax...</p></div>' +
         '<p><button class="ghost" onclick="qboDisconnect()">Disconnect</button></p>';
     } else {
       html += '<p class="muted">Not connected. Quotes and payments still work, they just do not reach your books by themselves.</p>' +
@@ -612,7 +616,45 @@ function settings() {
       '</p><p class="muted">The webhook URL to give Sentoo is <code>' + esc(location.origin) + '/api/webhooks/sentoo</code>, and <code>' + esc(location.host) + '</code> has to be on their allowed return address list.</p></div>';
 
     view.innerHTML = html;
+    if (qb.connected && !qb.needsReconnect) loadTaxCodes(qb);
   }).catch(showError);
+}
+
+/**
+ * Tax is the one thing here nobody should guess at. QuickBooks is asked which
+ * codes this company actually has, the owner picks the one that matches what
+ * he is required to charge, and every estimate line carries it from then on.
+ */
+function loadTaxCodes(qb) {
+  var box = document.getElementById('qtax');
+  if (!box) return;
+  api('/qbo/taxcodes').then(function (r) {
+    var codes = r.codes || [];
+    if (!codes.length) {
+      box.innerHTML = '<p class="muted">Your books do not use tax codes, so quotes go out untaxed.</p>';
+      return;
+    }
+    var h = '<label class="inline">Tax on every quote line ' +
+      '<select id="qtaxsel" onchange="saveTaxCode()">' +
+      '<option value="">No tax code</option>';
+    for (var i = 0; i < codes.length; i++) {
+      h += '<option value="' + esc(codes[i].id) + '"' +
+        (String(r.chosen) === String(codes[i].id) ? ' selected' : '') + '>' + esc(codes[i].name) + '</option>';
+    }
+    h += '</select></label>' +
+      '<p class="muted">Pick the one that matches the OB you are required to charge. ' +
+      'It goes on the QuickBooks estimate and on the invoice that follows it. ' +
+      'If A3D does not charge OB, leave it on <b>No tax code</b>.</p>';
+    box.innerHTML = h;
+  }).catch(function (e) {
+    box.innerHTML = '<p class="muted">Could not read your tax codes: ' + esc(e.message) + '</p>';
+  });
+}
+
+function saveTaxCode() {
+  var sel = document.getElementById('qtaxsel');
+  api('/qbo/taxcode', { method: 'POST', body: JSON.stringify({ id: sel.value }) })
+    .catch(function (e) { alert(e.message); });
 }
 
 function copyText(id) {
