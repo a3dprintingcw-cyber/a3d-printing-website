@@ -1,0 +1,48 @@
+# Deploy the back office to Cloudflare on every push to main.
+#
+# This exists because deploying by hand through a browser turned out to be the
+# most fragile part of the whole project. Now the repo is the source of truth:
+# push, and what is live matches what is here.
+#
+# One secret is required, CLOUDFLARE_API_TOKEN, set under
+# Settings, Secrets and variables, Actions. Create the token at
+# dash.cloudflare.com/profile/api-tokens with the "Edit Cloudflare Workers"
+# template, plus D1 Edit if you ever want migrations run from here.
+
+name: Deploy back office
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backoffice/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backoffice
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install
+        run: npm install
+
+      # The tests run against Miniflare with a throwaway database, so they
+      # touch nothing real. A broken build never reaches the live Worker.
+      - name: Test
+        run: |
+          node test.mjs
+          node test-admin.mjs
+
+      - name: Deploy
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
