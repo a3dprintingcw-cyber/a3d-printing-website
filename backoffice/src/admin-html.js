@@ -170,6 +170,7 @@ export const ADMIN_HTML = String.raw`<!doctype html>
     table.pl td[data-l]::before { content:attr(data-l); font-size:10.5px; text-transform:uppercase;
       letter-spacing:.05em; color:var(--ink-soft); }
   }
+  .co { font-size:13px; font-weight:600; color:var(--ink); }
   .orders-head { align-items:center; margin:26px 0 10px; }
   .orders-head h2 { margin:0; }
   /* One colour per side of the business, the same on the list and on the
@@ -382,8 +383,9 @@ function orderSection(title, mode, list, heads, middle, emptyText) {
   html += '<div class="scroll side-' + mode + '"><table><tr>' + heads.map(function (h) { return '<th>' + h + '</th>'; }).join('') + '</tr>';
   list.forEach(function (o) {
     html += '<tr class="row" onclick="location.hash=\'#/order/' + o.id + '\'">' +
-      '<td><b>' + esc(o.ref) + '</b></td><td>' + esc(o.customer_name) + '<div class="muted">' +
-      esc(shownEmail(o.customer_email)) + '</div></td>' +
+      '<td><b>' + esc(o.ref) + '</b></td><td>' + esc(o.customer_name) +
+      (o.customer_company ? '<div class="co">' + esc(o.customer_company) + '</div>' : '') +
+      '<div class="muted">' + esc(shownEmail(o.customer_email)) + '</div></td>' +
       middle(o).map(function (c) { return '<td>' + c + '</td>'; }).join('') +
       '<td>' + pill(o.status) + '</td><td class="muted">' + ago(o.created_at) + '</td></tr>';
   });
@@ -419,7 +421,9 @@ function newOrder(mode) {
   if (!name) { alert('A name is needed.'); return; }
   var email = prompt('Email address (leave empty for a walk-in)', '');
   if (email === null) return;
-  var body = { name: name, email: email.trim(), mode: mode };
+  var company = prompt('Company name (optional, leave empty if none)', '');
+  if (company === null) return;
+  var body = { name: name, email: email.trim(), company: company.trim(), mode: mode };
   if (mode === 'dev') {
     var kind = prompt('What kind of project? (website, app, webshop...)', '');
     if (kind === null) return;
@@ -441,7 +445,7 @@ function orderDetail(id) {
     var o = d.order;
     var html = '<div class="head"><div><h1>' + esc(o.ref) + ' ' + pill(o.status) + '</h1>' +
       '<p class="sub"><span class="dot ' + (o.mode === 'dev' ? 'dev' : 'print') + '"></span><b>' + (o.mode === 'dev' ? 'Web &amp; app dev' : '3D printing') + '</b> &middot; ' +
-      esc(o.customer_name) + ' &middot; ' + ago(o.created_at) +
+      esc(o.customer_name) + (o.customer_company ? ' (' + esc(o.customer_company) + ')' : '') + ' &middot; ' + ago(o.created_at) +
       (o.source === 'counter' ? ' &middot; added by hand' : '') + '</p></div>' +
       '<div class="bar" style="margin:0"><button onclick="moveOrderSide(' + o.id + ',\'' + (o.mode === 'dev' ? 'print' : 'dev') + '\')">' +
       (o.mode === 'dev' ? 'Move to 3D printing' : 'Move to Web &amp; app dev') + '</button>' +
@@ -545,6 +549,7 @@ function orderDetail(id) {
     html += '</div><div>';
     html += '<div class="card"><h2 style="margin-top:0">Customer</h2><dl class="kv">' +
       '<dt>Name</dt><dd><a class="linkish" href="#/customer/' + o.customer_id + '">' + esc(o.customer_name) + '</a></dd>' +
+      '<dt>Company</dt><dd>' + (o.customer_company ? esc(o.customer_company) : '<span class="muted">-</span>') + '</dd>' +
       '<dt>Email</dt><dd>' + (hasEmail(o.customer_email)
         ? '<a class="linkish" href="mailto:' + esc(o.customer_email) + '">' + esc(o.customer_email) + '</a>'
         : '<span class="muted">no email</span>') + '</dd>' +
@@ -783,7 +788,8 @@ function customers() {
     }
     html += '<div class="scroll"><table><tr><th>Name</th><th>Email</th><th>Phone</th><th class="right">Orders</th><th>Last order</th><th style="width:40px"></th></tr>';
     d.customers.forEach(function (c) {
-      html += '<tr class="row" onclick="location.hash=\'#/customer/' + c.id + '\'"><td><b>' + esc(c.name) + '</b></td><td>' +
+      html += '<tr class="row" onclick="location.hash=\'#/customer/' + c.id + '\'"><td><b>' + esc(c.name) + '</b>' +
+        (c.company ? '<div class="co">' + esc(c.company) + '</div>' : '') + '</td><td>' +
         esc(shownEmail(c.email)) + '</td><td>' + esc(c.phone || '-') +
         '</td><td class="right">' + c.orders + '</td><td class="muted">' + (c.last_order ? ago(c.last_order) : '-') + '</td>' +
         '<td><button class="ghost" title="Delete this customer" onclick="event.stopPropagation();deleteCustomer(' + c.id + ')">&times;</button></td></tr>';
