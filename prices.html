@@ -115,7 +115,21 @@
   </div>
 </footer>
 
-<script src="js/config.js"></script>
-<script src="js/main.js"></script>
+<!-- The ?v= forces a fresh copy after a change. GitHub Pages lets browsers
+     keep scripts for ten minutes, and this page cannot show prices with an
+     older main.js that does not know how to load them. Bump it whenever
+     js/main.js changes. -->
+<script src="js/config.js?v=20260910"></script>
+<script src="js/main.js?v=20260910"></script>
+<script>
+  // If nothing has replaced the loading card after ten seconds, say so rather
+  // than leave a visitor watching "Loading prices" forever.
+  setTimeout(function () {
+    var c = document.querySelector("[data-live-prices] .price-loading");
+    if (!c) return;
+    c.querySelector("h3").textContent = "Couldn't load prices";
+    c.querySelector("p").textContent = "Refresh the page, or ask us on WhatsApp for a price.";
+  }, 10000);
+</script>
 </body>
 </html>
