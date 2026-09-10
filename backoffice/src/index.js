@@ -44,6 +44,15 @@ function ext(name) {
   return m ? m[1].toLowerCase() : '';
 }
 
+// A walk-in has no email, but the customers table needs one to key on, so a
+// placeholder is stored. Nothing may ever send to it or file it in QuickBooks:
+// this is the one place that decides whether an address is real.
+const PLACEHOLDER_DOMAIN = '@a3d.local';
+export function realEmail(email) {
+  const e = String(email || '').trim();
+  return e.toLowerCase().endsWith(PLACEHOLDER_DOMAIN) ? '' : e;
+}
+
 async function upsertCustomer(env, { name, email, phone, company }) {
   const clean = (email || '').trim().toLowerCase();
   const found = await env.DB.prepare('SELECT * FROM customers WHERE email = ?').bind(clean).first();
@@ -179,7 +188,7 @@ async function syncEstimate(env, quoteId) {
     let qboCustomerId = customer.qbo_customer_id;
     if (!qboCustomerId) {
       qboCustomerId = await qbo.findOrCreateCustomer(env, conf, {
-        name: customer.name, email: customer.email, phone: customer.phone,
+        name: customer.name, email: realEmail(customer.email), phone: customer.phone,
       });
       await env.DB.prepare('UPDATE customers SET qbo_customer_id = ? WHERE id = ?')
         .bind(qboCustomerId, customer.id).run();
@@ -195,7 +204,7 @@ async function syncEstimate(env, quoteId) {
       // A quote that charges no OB must not carry the OB code into QuickBooks
       // either, or the books would show tax the customer was never asked for.
       taxCode: quote.tax_cents > 0 ? (conf.taxCode || null) : null,
-      customerEmail: customer.email,
+      customerEmail: realEmail(customer.email),
     });
     await env.DB.prepare('UPDATE quotes SET qbo_estimate_id = ?, qbo_estimate_no = ?, qbo_error = NULL WHERE id = ?')
       .bind(est.id, est.number, quoteId).run();
@@ -557,7 +566,8 @@ export async function adminRoutes(request, env, url, email) {
   if (orderMatch && method === 'GET') {
     const id = Number(orderMatch[1]);
     const order = await env.DB.prepare(
-      `SELECT o.*, c.name customer_name, c.email customer_email, c.phone customer_phone
+      `SELECT o.*, c.name customer_name, c.email customer_email, c.phone customer_phone,
+              c.qbo_customer_id customer_qbo_id
        FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = ?`,
     ).bind(id).first();
     if (!order) return bad('No such order', 404);
@@ -616,6 +626,57 @@ export async function adminRoutes(request, env, url, email) {
     });
   }
 
+  // A walk-in is a real customer too. Everything else in here starts from the
+  // website form, which left the person standing at the counter with nowhere
+  // to go. This is the same shape of order, typed in by hand.
+  if (p === '/orders' && method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    const name = String(body.name || '').trim();
+    const email = String(body.email || '').trim().toLowerCase();
+    if (!name) return bad('A name is needed.');
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return bad('That email address does not look right.');
+
+    const customer = await upsertCustomer(env, {
+      name,
+      // Without an email there is nothing to match a customer on later, so a
+      // placeholder keyed to the name keeps walk-ins from merging into one row.
+      email: email || 'walkin+' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + PLACEHOLDER_DOMAIN,
+      phone: body.phone || '',
+      company: body.company || '',
+    });
+    const order = await env.DB.prepare(
+      `INSERT INTO orders (ref, customer_id, mode, material, colour, quantity, notes, source)
+       VALUES ('pending', ?, 'print', ?, ?, ?, ?, 'counter') RETURNING *`,
+    ).bind(customer.id, body.material || null, body.colour || null, body.quantity || null, body.notes || null).first();
+    const ref = `A3D-${String(order.id).padStart(4, '0')}`;
+    await env.DB.prepare('UPDATE orders SET ref = ? WHERE id = ?').bind(ref, order.id).run();
+    await env.DB.prepare('INSERT INTO order_events (order_id, kind, detail) VALUES (?, ?, ?)')
+      .bind(order.id, 'note', 'Added by hand in the back office').run();
+    return json({ ok: true, id: order.id, ref });
+  }
+
+  const delMatch = p.match(/^\/orders\/(\d+)$/);
+  if (delMatch && method === 'DELETE') {
+    const id = Number(delMatch[1]);
+    const order = await env.DB.prepare('SELECT * FROM orders WHERE id = ?').bind(id).first();
+    if (!order) return bad('No such order', 404);
+    // Deliberately does not touch QuickBooks. An estimate or invoice that has
+    // been raised is an accounting record; it is not this button's business to
+    // reach into his books. The back office forgets, the books do not.
+    const rows = await env.DB.prepare('SELECT r2_key FROM order_files WHERE order_id = ?').bind(id).all();
+    for (const f of rows.results || []) {
+      if (f.r2_key) await env.FILES.delete(f.r2_key).catch(() => {});
+    }
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM quote_lines WHERE quote_id IN (SELECT id FROM quotes WHERE order_id = ?)').bind(id),
+      env.DB.prepare('DELETE FROM quotes WHERE order_id = ?').bind(id),
+      env.DB.prepare('DELETE FROM order_files WHERE order_id = ?').bind(id),
+      env.DB.prepare('DELETE FROM order_events WHERE order_id = ?').bind(id),
+      env.DB.prepare('DELETE FROM orders WHERE id = ?').bind(id),
+    ]);
+    return json({ ok: true, ref: order.ref });
+  }
+
   if (p === '/customers' && method === 'GET') {
     const rows = await env.DB.prepare(
       `SELECT c.*, COUNT(o.id) orders, MAX(o.created_at) last_order
@@ -623,6 +684,42 @@ export async function adminRoutes(request, env, url, email) {
        GROUP BY c.id ORDER BY last_order DESC NULLS LAST LIMIT 200`,
     ).all();
     return json({ customers: rows.results });
+  }
+
+  const custMatch = p.match(/^\/customers\/(\d+)$/);
+  if (custMatch && method === 'GET') {
+    const id = Number(custMatch[1]);
+    const customer = await env.DB.prepare('SELECT * FROM customers WHERE id = ?').bind(id).first();
+    if (!customer) return bad('No such customer', 404);
+    const orders = await env.DB.prepare(
+      'SELECT id, ref, status, created_at, material, quantity FROM orders WHERE customer_id = ? ORDER BY id DESC',
+    ).bind(id).all();
+    const spend = await env.DB.prepare(
+      `SELECT COALESCE(SUM(q.total_cents), 0) total FROM quotes q
+       JOIN orders o ON o.id = q.order_id WHERE o.customer_id = ? AND q.paid_at IS NOT NULL`,
+    ).bind(id).first();
+    return json({ customer, orders: orders.results, paidCents: spend ? spend.total : 0 });
+  }
+
+  // Searching his real QuickBooks by name, so an order can be pinned to the
+  // customer card he already has rather than a lookalike this app invented.
+  if (p === '/qbo/customers' && method === 'GET') {
+    const conf = await qbo.qboConfig(env);
+    if (!conf.realmId) return bad('Connect QuickBooks first.');
+    try {
+      return json({ customers: await qbo.searchCustomers(env, conf, url.searchParams.get('q') || '') });
+    } catch (e) {
+      return bad(e.message);
+    }
+  }
+
+  const linkMatch = p.match(/^\/customers\/(\d+)\/qbo$/);
+  if (linkMatch && method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    const qboId = String(body.qbo_customer_id || '').trim();
+    await env.DB.prepare('UPDATE customers SET qbo_customer_id = ? WHERE id = ?')
+      .bind(qboId || null, Number(linkMatch[1])).run();
+    return json({ ok: true, qbo_customer_id: qboId });
   }
 
   if (p === '/prices' && method === 'GET') {
@@ -638,6 +735,22 @@ export async function adminRoutes(request, env, url, email) {
         .bind(row.name, row.description || null, row.unit_cents ?? null, row.active ? 1 : 0, row.id),
     );
     if (stmts.length) await env.DB.batch(stmts);
+    return json({ ok: true });
+  }
+
+  if (p === '/prices/add' && method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    const name = String(body.name || '').trim() || 'New item';
+    const last = await env.DB.prepare('SELECT COALESCE(MAX(position), 0) p FROM price_list').first();
+    const row = await env.DB.prepare(
+      'INSERT INTO price_list (sku, name, description, unit_cents, active, position) VALUES (?, ?, ?, ?, 1, ?) RETURNING *',
+    ).bind(null, name, null, null, (last ? last.p : 0) + 1).first();
+    return json({ ok: true, price: row });
+  }
+
+  const priceMatch = p.match(/^\/prices\/(\d+)$/);
+  if (priceMatch && method === 'DELETE') {
+    await env.DB.prepare('DELETE FROM price_list WHERE id = ?').bind(Number(priceMatch[1])).run();
     return json({ ok: true });
   }
 
@@ -738,6 +851,9 @@ export async function adminRoutes(request, env, url, email) {
       }
     }
 
+    if (!realEmail(order.customer_email)) {
+      return bad('This customer has no email address, so there is nothing to send to. The payment link is ready: ' + payUrl, 400);
+    }
     if (!(await gmailReady(env))) {
       return bad('Email is not connected yet. The payment link is ready: ' + payUrl, 503);
     }
