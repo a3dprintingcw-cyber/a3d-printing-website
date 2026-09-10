@@ -146,6 +146,27 @@ await t('sentoo webhook shrugs off unknown ids', async () => {
   assert(r.status === 200, 'status ' + r.status);
 });
 
+// Company is optional on the website form: left out it is not required, given
+// it is stored, and a later request without it does not wipe it.
+await t('the company name is optional and kept once given', async () => {
+  const none = await mf.dispatchFetch('https://a3dprinting.com/api/quote-request',
+    multipart({ name: 'Solo Sam', email: 'sam@example.com', notes: 'no company' }));
+  assert(none.status === 200, 'a request without a company was refused: ' + none.status);
+  const sam = await db.prepare("select company from customers where email = 'sam@example.com'").first();
+  assert(!sam.company, 'company should be empty, got ' + sam.company);
+
+  const withCo = await mf.dispatchFetch('https://a3dprinting.com/api/quote-request',
+    multipart({ name: 'Kira', email: 'kira@papagayo.cw', company: '  Papagayo Hotel  ', notes: 'toppers' }));
+  assert(withCo.status === 200, 'http ' + withCo.status);
+  let row = await db.prepare("select company from customers where email = 'kira@papagayo.cw'").first();
+  assert(row.company === 'Papagayo Hotel', 'company stored as ' + JSON.stringify(row.company));
+
+  await mf.dispatchFetch('https://a3dprinting.com/api/quote-request',
+    multipart({ name: 'Kira', email: 'kira@papagayo.cw', notes: 'more toppers' }));
+  row = await db.prepare("select company from customers where email = 'kira@papagayo.cw'").first();
+  assert(row.company === 'Papagayo Hotel', 'a second request without a company wiped it: ' + row.company);
+});
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 await mf.dispose();
 process.exit(fail ? 1 : 0);
