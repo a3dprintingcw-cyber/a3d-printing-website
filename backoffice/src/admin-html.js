@@ -83,7 +83,10 @@ export const ADMIN_HTML = String.raw`<!doctype html>
   .timeline { padding:0; margin:0; }
   .muted { color:var(--ink-soft); font-size:13px; }
   .lines td { padding:6px 8px; }
-  .lines input[type=text] { width:100%; }
+  .lines input[type=text], .lines input[type=number] { width:100%; }
+  /* Fixed layout, so the Item column takes the room that is left rather than
+     the number boxes taking it and Item shrinking to a sliver. */
+  table.lines { table-layout:fixed; }
   .right { text-align:right; }
   .flash { padding:10px 14px; border-radius:10px; background:var(--blue-light); color:var(--blue);
            font-size:13.5px; margin-bottom:14px; }
@@ -166,6 +169,27 @@ export const ADMIN_HTML = String.raw`<!doctype html>
     table.pl td[data-l] { display:flex; flex-direction:column; align-items:center; gap:3px; }
     table.pl td[data-l]::before { content:attr(data-l); font-size:10.5px; text-transform:uppercase;
       letter-spacing:.05em; color:var(--ink-soft); }
+  }
+  .orders-head { align-items:center; margin:26px 0 10px; }
+  .orders-head h2 { margin:0; }
+  /* One colour per side of the business, the same on the list and on the
+     order itself, so a glance says which kind of job it is. */
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:8px; vertical-align:1px; }
+  .dot.print { background:var(--blue); }
+  .dot.dev { background:#8b5cf6; }
+  .side-print table { border-top:3px solid var(--blue); }
+  .side-dev table { border-top:3px solid #8b5cf6; }
+  .head + .grid2 { margin-top:16px; }
+  /* On a phone a quote line is a small block: what it is across the top,
+     then quantity, price, line total and remove on one row beneath. Four
+     fixed columns do not fit in 360 pixels and the item name lost. */
+  @media (max-width:820px) {
+    table.lines, table.lines tbody, table.lines tr, table.lines td { display:block; width:100%; }
+    table.lines thead { display:none; }
+    table.lines tr { display:grid; grid-template-columns:70px minmax(0,1fr) auto auto; gap:6px 8px;
+      align-items:center; padding:8px 0; border-bottom:1px solid var(--border); }
+    table.lines td { padding:0; width:auto; }
+    table.lines td:first-child { grid-column:1 / -1; }
   }
   .savebar { position:sticky; bottom:0; margin-top:14px; padding:12px 0; background:var(--paper); }
   .form label { display:block; margin:10px 0; font-size:13px; color:var(--ink-soft); }
@@ -262,7 +286,8 @@ function dashboard() {
     var open = (counts.new || 0) + (counts.quoted || 0) + (counts.approved || 0) + (counts.printing || 0);
     var html = '<div class="head"><div><h1>Dashboard</h1>' +
       '<p class="sub">Jobs are all time. Visitors are the last 30 days.</p></div>' +
-      '<button class="primary" onclick="newOrder()">New order</button></div>' +
+      '<div class="bar" style="margin:0"><button class="primary" onclick="newOrder(\'print\')">New 3D print order</button>' +
+      '<button onclick="newOrder(\'dev\')">New web/app order</button></div></div>' +
       '<div class="tiles">' +
       '<div class="tile"><b>' + (counts.new || 0) + '</b><span>new requests waiting</span></div>' +
       '<div class="tile"><b>' + open + '</b><span>open jobs</span></div>' +
@@ -313,8 +338,7 @@ function orders() {
   var q = sessionStorage.getItem('a3d.q') || '';
   api('/orders?status=' + encodeURIComponent(status) + '&q=' + encodeURIComponent(q)).then(function (d) {
     var opts = ['all', 'new', 'quoted', 'approved', 'printing', 'ready', 'delivered', 'paid', 'closed', 'lost'];
-    var html = '<div class="head"><h1>Orders</h1>' +
-      '<button class="primary" onclick="newOrder()">New order</button></div>' +
+    var html = '<div class="head"><h1>Orders</h1></div>' +
       '<div class="bar"><select id="st" onchange="applyFilter()">';
     opts.forEach(function (o) {
       html += '<option value="' + o + '"' + (o === status ? ' selected' : '') + '>' + o + '</option>';
@@ -325,26 +349,45 @@ function orders() {
       '<button class="primary" onclick="applyFilter()">Search</button>' +
       ((q || status !== 'all') ? '<button class="ghost" onclick="clearFilter()">Clear</button>' : '') + '</div>';
 
-    if (!d.orders.length) {
-      html += empty(q || status !== 'all' ? 'Nothing matches that' : 'No orders yet',
-        q || status !== 'all' ? 'Try a wider search, or clear the filter.'
-          : 'They arrive from the website form, or you can add one by hand.');
-      view.innerHTML = html;
-      return;
-    }
+    // The two sides of the business are different jobs with different
+    // questions (material and colour, or project and timeline), so each gets
+    // its own table with its own columns. The filter and search apply to both.
+    var filtered = q || status !== 'all';
+    var print = d.orders.filter(function (o) { return o.mode !== 'dev'; });
+    var dev = d.orders.filter(function (o) { return o.mode === 'dev'; });
 
-    html += '<div class="scroll"><table><tr><th>Ref</th><th>Customer</th><th>Wants</th><th>Files</th><th>Status</th><th>When</th></tr>';
-    d.orders.forEach(function (o) {
-      var wants = o.mode === 'dev' ? (o.project_type || 'Project') : ((o.material || 'Print') + (o.quantity ? ' x' + o.quantity : ''));
-      html += '<tr class="row" onclick="location.hash=\'#/order/' + o.id + '\'">' +
-        '<td><b>' + esc(o.ref) + '</b></td><td>' + esc(o.customer_name) + '<div class="muted">' +
-        esc(shownEmail(o.customer_email)) + '</div></td><td>' + esc(wants) + '</td><td>' + (o.files || 0) + '</td><td>' +
-        pill(o.status) + '</td><td class="muted">' + ago(o.created_at) + '</td></tr>';
-    });
-    html += '</table></div>';
+    html += orderSection('3D printing', 'print', print,
+      ['Ref', 'Customer', 'Wants', 'Colour', 'Files', 'Status', 'When'],
+      function (o) {
+        return [esc((o.material || 'Print') + (o.quantity ? ' x' + o.quantity : '')), esc(o.colour || '-'), String(o.files || 0)];
+      },
+      filtered ? 'No 3D printing orders match that.' : 'No 3D printing orders yet. They arrive from the website form, or add one with New.');
+    html += orderSection('Web & app dev', 'dev', dev,
+      ['Ref', 'Customer', 'Project', 'Timeline', 'Files', 'Status', 'When'],
+      function (o) {
+        return [esc(o.project_type || 'Project'), esc(o.timeline || '-'), String(o.files || 0)];
+      },
+      filtered ? 'No web or app orders match that.' : 'No web or app orders yet. They arrive from the website form, or add one with New.');
+
     if (d.orders.length >= 200) html += '<p class="muted">Showing the newest 200. Narrow it with the search box.</p>';
     view.innerHTML = html;
   }).catch(showError);
+}
+// One side of the business: a heading with its own count and New button, and
+// a table whose middle columns suit that kind of job.
+function orderSection(title, mode, list, heads, middle, emptyText) {
+  var html = '<div class="head orders-head"><h2><span class="dot ' + mode + '"></span>' + esc(title) + ' <span class="muted">(' + list.length + ')</span></h2>' +
+    '<button class="primary small" onclick="newOrder(\'' + mode + '\')">New</button></div>';
+  if (!list.length) return html + '<div class="card muted">' + esc(emptyText) + '</div>';
+  html += '<div class="scroll side-' + mode + '"><table><tr>' + heads.map(function (h) { return '<th>' + h + '</th>'; }).join('') + '</tr>';
+  list.forEach(function (o) {
+    html += '<tr class="row" onclick="location.hash=\'#/order/' + o.id + '\'">' +
+      '<td><b>' + esc(o.ref) + '</b></td><td>' + esc(o.customer_name) + '<div class="muted">' +
+      esc(shownEmail(o.customer_email)) + '</div></td>' +
+      middle(o).map(function (c) { return '<td>' + c + '</td>'; }).join('') +
+      '<td>' + pill(o.status) + '</td><td class="muted">' + ago(o.created_at) + '</td></tr>';
+  });
+  return html + '</table></div>';
 }
 // Walk-ins are stored with a placeholder address so the customer list can key
 // on something. It is not an address anybody should ever see or write to.
@@ -368,16 +411,24 @@ function clearFilter() {
 
 // ------------------------------------------------------------- new order
 // The counter case: someone walks in, so there is no website form to wait for.
-function newOrder() {
-  var name = prompt('Customer name');
+function newOrder(mode) {
+  mode = mode === 'dev' ? 'dev' : 'print';
+  var name = prompt(mode === 'dev' ? 'New web or app order. Customer name?' : 'New 3D printing order. Customer name?');
   if (name === null) return;
   name = name.trim();
   if (!name) { alert('A name is needed.'); return; }
   var email = prompt('Email address (leave empty for a walk-in)', '');
   if (email === null) return;
+  var body = { name: name, email: email.trim(), mode: mode };
+  if (mode === 'dev') {
+    var kind = prompt('What kind of project? (website, app, webshop...)', '');
+    if (kind === null) return;
+    body.project_type = kind.trim();
+  }
   var what = prompt('What are they after? (this becomes the note)', '');
   if (what === null) return;
-  api('/orders', { method: 'POST', body: JSON.stringify({ name: name, email: email.trim(), notes: what }) })
+  body.notes = what;
+  api('/orders', { method: 'POST', body: JSON.stringify(body) })
     .then(function (r) { location.hash = '#/order/' + r.id; })
     .catch(function (e) { alert(e.message); });
 }
@@ -389,9 +440,12 @@ function orderDetail(id) {
     current = d;
     var o = d.order;
     var html = '<div class="head"><div><h1>' + esc(o.ref) + ' ' + pill(o.status) + '</h1>' +
-      '<p class="sub">' + esc(o.customer_name) + ' &middot; ' + ago(o.created_at) +
+      '<p class="sub"><span class="dot ' + (o.mode === 'dev' ? 'dev' : 'print') + '"></span><b>' + (o.mode === 'dev' ? 'Web &amp; app dev' : '3D printing') + '</b> &middot; ' +
+      esc(o.customer_name) + ' &middot; ' + ago(o.created_at) +
       (o.source === 'counter' ? ' &middot; added by hand' : '') + '</p></div>' +
-      '<button class="danger" onclick="deleteOrder(' + o.id + ',\'' + esc(o.ref) + '\')">Delete order</button></div>' +
+      '<div class="bar" style="margin:0"><button onclick="moveOrderSide(' + o.id + ',\'' + (o.mode === 'dev' ? 'print' : 'dev') + '\')">' +
+      (o.mode === 'dev' ? 'Move to 3D printing' : 'Move to Web &amp; app dev') + '</button>' +
+      '<button class="danger" onclick="deleteOrder(' + o.id + ',\'' + esc(o.ref) + '\')">Delete order</button></div></div>' +
       '<div class="grid2"><div>';
 
     html += '<div class="card"><h2 style="margin-top:0">The request</h2><dl class="kv">';
@@ -416,6 +470,10 @@ function orderDetail(id) {
     } else {
       html += '<p class="muted">No files uploaded with this request.</p>';
     }
+    // Close the request card here. Left open, it swallowed the quotes and
+    // the closing tag meant for the left column, so the customer, status and
+    // history cards all fell into the left column and the right one sat empty.
+    html += '</div>';
 
     html += '<h2>Quotes</h2>';
     if (d.quotes.length) {
@@ -473,7 +531,7 @@ function orderDetail(id) {
     TAX_PCT = d.taxPct || 0;
     html += '<div class="card"><h2 style="margin-top:0">Build a quote</h2>' +
       '<table class="lines" id="lines"><thead><tr><th>Item</th><th style="width:78px">Qty</th>' +
-      '<th style="width:120px">Price each</th><th style="width:120px;text-align:right">Line</th><th style="width:34px"></th>' +
+      '<th style="width:110px">Price each</th><th style="width:90px;text-align:right">Line</th><th style="width:48px"></th>' +
       '</tr></thead><tbody></tbody></table>' +
       '<div class="bar" style="margin-top:10px"><button onclick="addLine()">Add line</button></div>' +
       (TAX_PCT
@@ -565,6 +623,12 @@ function copyValue(btn, text) {
   }, function () { prompt('Copy this', text); });
 }
 
+function moveOrderSide(id, mode) {
+  api('/orders/' + id, { method: 'POST', body: JSON.stringify({ mode: mode }) })
+    .then(function () {
+      return orderDetail(id);
+    }).catch(showError);
+}
 function deleteOrder(id, ref) {
   if (!confirm('Delete ' + ref + ' for good? Its quotes, files and history go with it.\n\n' +
     'Anything already in QuickBooks stays there, this only clears the back office.')) return;
