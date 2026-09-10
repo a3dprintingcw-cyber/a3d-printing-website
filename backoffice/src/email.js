@@ -42,7 +42,9 @@ export function newOrderAlert(order, customer, files) {
     '',
     files.length ? `${files.length} file(s) attached to the order.` : 'No files uploaded.',
     '',
-    'Open the back office: https://a3dprinting.com/admin',
+    // Straight to this order in the back office. The back office lives on the
+    // app subdomain; the bare a3dprinting.com/admin is the public site and 404s.
+    `Open this order: https://app.a3dprinting.com/admin#/order/${order.id}`,
   ].filter(Boolean);
   return lines.join('\n');
 }
