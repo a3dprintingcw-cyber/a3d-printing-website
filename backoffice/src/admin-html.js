@@ -82,12 +82,32 @@ export const ADMIN_HTML = String.raw`<!doctype html>
   .right { text-align:right; }
   .flash { padding:10px 14px; border-radius:10px; background:var(--blue-light); color:var(--blue);
            font-size:13.5px; margin-bottom:14px; }
+  /* A table with six columns cannot be squeezed into a phone, so it is not
+     asked to. Every table sits in its own scroller and the page itself never
+     scrolls sideways, which is what makes a back office feel broken on a
+     phone more than anything else. */
+  .scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; margin:0 0 4px; }
+  .scroll table { min-width:520px; }
   @media (max-width:820px) {
+    body { overflow-x:hidden; }
     .layout { grid-template-columns:1fr; }
-    .side { border-right:none; border-bottom:1px solid var(--border); }
-    .nav { display:flex; gap:6px; flex-wrap:wrap; }
+    .side { position:sticky; top:0; z-index:20; padding:10px 12px 8px;
+            border-right:none; border-bottom:1px solid var(--border);
+            background:var(--paper-soft); }
+    .brand { font-size:15px; margin:0 0 8px; }
+    .nav { display:flex; gap:6px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none; }
+    .nav::-webkit-scrollbar { display:none; }
+    .nav a { padding:7px 13px; font-size:13.5px; white-space:nowrap; }
+    .side .who { margin-top:8px; font-size:11px; }
     .grid2 { grid-template-columns:1fr; }
-    main { padding:20px; }
+    main { padding:16px 14px 60px; }
+    h1 { font-size:20px; }
+    .card { padding:14px 15px; }
+    .kv { grid-template-columns:92px 1fr; }
+    button { padding:10px 14px; }
+    .tiles { grid-template-columns:1fr 1fr; gap:10px; }
+    .tile { padding:12px 14px; }
+    .tile b { font-size:22px; }
   }
   .lines thead th { text-align:left; font-size:12px; text-transform:uppercase; letter-spacing:.06em;
     color:var(--ink-soft); font-weight:600; padding:0 8px 6px; }
@@ -116,6 +136,20 @@ export const ADMIN_HTML = String.raw`<!doctype html>
   .form label.check input { display:inline-block; width:auto; margin:0; }
   .form input { display:block; width:100%; max-width:520px; margin-top:4px; padding:9px 11px;
     border-radius:9px; border:1px solid var(--border); background:var(--paper); color:var(--ink); font-size:14px; }
+  .danger { color:var(--bad); border-color:var(--bad); background:transparent; }
+  .head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; }
+  .linkish { color:var(--blue); text-decoration:none; font-weight:600; }
+  .linkish:hover { text-decoration:underline; }
+  .empty { border:1px dashed var(--border); border-radius:var(--radius); padding:28px 20px;
+    text-align:center; color:var(--ink-soft); font-size:14px; }
+  .empty b { display:block; color:var(--ink); font-size:15px; margin-bottom:4px; }
+  .stack { display:grid; gap:8px; }
+  .picked { font-size:13px; color:var(--ink-soft); margin-top:6px; }
+  .hit { display:flex; justify-content:space-between; gap:10px; align-items:center;
+    padding:7px 10px; border:1px solid var(--border); border-radius:9px; font-size:13px; }
+  dialog { border:1px solid var(--border); border-radius:var(--radius); background:var(--card);
+    color:var(--ink); padding:20px; width:min(440px,92vw); }
+  dialog::backdrop { background:rgba(0,0,0,.5); }
 </style>
 </head>
 <body>
@@ -165,9 +199,18 @@ function ago(iso) {
 function pill(status) {
   return '<span class="pill ' + esc(status) + '">' + esc(status) + '</span>';
 }
+// Every table goes through here so none of them can push the page sideways.
+function wrap(tableHtml) {
+  return '<div class="scroll">' + tableHtml + '</div>';
+}
+function empty(title, line) {
+  return '<div class="empty"><b>' + esc(title) + '</b>' + esc(line || '') + '</div>';
+}
 
 function setNav(route) {
   var r = String(route).split('?')[0];
+  if (r === 'order') r = 'orders';
+  if (r === 'customer') r = 'customers';
   var links = document.querySelectorAll('#nav a');
   for (var i = 0; i < links.length; i++) {
     links[i].className = links[i].getAttribute('data-route') === r ? 'on' : '';
@@ -180,14 +223,17 @@ function dashboard() {
     var counts = {};
     s.byStatus.forEach(function (r) { counts[r.status] = r.n; });
     var open = (counts.new || 0) + (counts.quoted || 0) + (counts.approved || 0) + (counts.printing || 0);
-    var html = '<h1>Dashboard</h1><p class="sub">Last 30 days.</p><div class="tiles">' +
+    var html = '<div class="head"><div><h1>Dashboard</h1>' +
+      '<p class="sub">Jobs are all time. Visitors are the last 30 days.</p></div>' +
+      '<button class="primary" onclick="newOrder()">New order</button></div>' +
+      '<div class="tiles">' +
       '<div class="tile"><b>' + (counts.new || 0) + '</b><span>new requests waiting</span></div>' +
       '<div class="tile"><b>' + open + '</b><span>open jobs</span></div>' +
       '<div class="tile"><b>' + (s.visits.visitors || 0) + '</b><span>website visitors</span></div>' +
       '<div class="tile"><b>' + s.conversion + '%</b><span>visitors who asked for a quote</span></div>' +
       '</div>';
 
-    html += '<h2>Pipeline</h2><table><tr>';
+    html += '<h2>Pipeline</h2><div class="scroll"><table><tr>';
     ['new', 'quoted', 'approved', 'printing', 'ready', 'delivered', 'paid'].forEach(function (st) {
       html += '<th>' + st + '</th>';
     });
@@ -195,30 +241,30 @@ function dashboard() {
     ['new', 'quoted', 'approved', 'printing', 'ready', 'delivered', 'paid'].forEach(function (st) {
       html += '<td><b>' + (counts[st] || 0) + '</b></td>';
     });
-    html += '</tr></table>';
+    html += '</tr></table></div>';
 
-    html += '<h2>Latest requests</h2><table><tr><th>Ref</th><th>Customer</th><th>Status</th><th>When</th></tr>';
+    html += '<h2>Latest requests</h2><div class="scroll"><table><tr><th>Ref</th><th>Customer</th><th>Status</th><th>When</th></tr>';
     s.recent.forEach(function (o) {
       html += '<tr class="row" onclick="location.hash=\'#/order/' + o.id + '\'"><td><b>' + esc(o.ref) +
         '</b></td><td>' + esc(o.customer_name) + '</td><td>' + pill(o.status) + '</td><td class="muted">' +
         ago(o.created_at) + '</td></tr>';
     });
     if (!s.recent.length) html += '<tr><td colspan="4" class="muted">Nothing yet.</td></tr>';
-    html += '</table>';
+    html += '</table></div>';
 
-    html += '<div class="grid2"><div><h2>Most visited pages</h2><table><tr><th>Page</th><th class="right">Views</th></tr>';
+    html += '<div class="grid2"><div><h2>Most visited pages</h2><div class="scroll"><table><tr><th>Page</th><th class="right">Views</th></tr>';
     s.topPages.forEach(function (p) {
       html += '<tr><td>' + esc(p.path) + '</td><td class="right">' + p.n + '</td></tr>';
     });
     if (!s.topPages.length) html += '<tr><td colspan="2" class="muted">No traffic recorded yet.</td></tr>';
-    html += '</table></div><div><h2>Where they came from</h2><table><tr><th>Source</th><th class="right">Visits</th></tr>';
+    html += '</table></div></div><div><h2>Where they came from</h2><div class="scroll"><table><tr><th>Source</th><th class="right">Visits</th></tr>';
     s.referrers.forEach(function (r) {
       var host = r.referrer;
       try { host = new URL(r.referrer).hostname; } catch (e) {}
       html += '<tr><td>' + esc(host) + '</td><td class="right">' + r.n + '</td></tr>';
     });
     if (!s.referrers.length) html += '<tr><td colspan="2" class="muted">Direct visits only so far.</td></tr>';
-    html += '</table></div></div>';
+    html += '</table></div></div></div>';
 
     view.innerHTML = html;
   }).catch(showError);
@@ -230,29 +276,73 @@ function orders() {
   var q = sessionStorage.getItem('a3d.q') || '';
   api('/orders?status=' + encodeURIComponent(status) + '&q=' + encodeURIComponent(q)).then(function (d) {
     var opts = ['all', 'new', 'quoted', 'approved', 'printing', 'ready', 'delivered', 'paid', 'closed', 'lost'];
-    var html = '<h1>Orders</h1><div class="bar"><select id="st">';
+    var html = '<div class="head"><h1>Orders</h1>' +
+      '<button class="primary" onclick="newOrder()">New order</button></div>' +
+      '<div class="bar"><select id="st" onchange="applyFilter()">';
     opts.forEach(function (o) {
       html += '<option value="' + o + '"' + (o === status ? ' selected' : '') + '>' + o + '</option>';
     });
-    html += '</select><input type="text" id="q" placeholder="Search name, email, reference" value="' + esc(q) + '">' +
-      '<button class="primary" onclick="applyFilter()">Filter</button></div>';
-    html += '<table><tr><th>Ref</th><th>Customer</th><th>Wants</th><th>Files</th><th>Status</th><th>When</th></tr>';
+    // Enter searches, because nobody hunts for a Filter button on a phone.
+    html += '</select><input type="text" id="q" placeholder="Search name, email, reference" value="' + esc(q) +
+      '" onkeydown="if(event.key===\'Enter\')applyFilter()">' +
+      '<button class="primary" onclick="applyFilter()">Search</button>' +
+      ((q || status !== 'all') ? '<button class="ghost" onclick="clearFilter()">Clear</button>' : '') + '</div>';
+
+    if (!d.orders.length) {
+      html += empty(q || status !== 'all' ? 'Nothing matches that' : 'No orders yet',
+        q || status !== 'all' ? 'Try a wider search, or clear the filter.'
+          : 'They arrive from the website form, or you can add one by hand.');
+      view.innerHTML = html;
+      return;
+    }
+
+    html += '<div class="scroll"><table><tr><th>Ref</th><th>Customer</th><th>Wants</th><th>Files</th><th>Status</th><th>When</th></tr>';
     d.orders.forEach(function (o) {
       var wants = o.mode === 'dev' ? (o.project_type || 'Project') : ((o.material || 'Print') + (o.quantity ? ' x' + o.quantity : ''));
       html += '<tr class="row" onclick="location.hash=\'#/order/' + o.id + '\'">' +
         '<td><b>' + esc(o.ref) + '</b></td><td>' + esc(o.customer_name) + '<div class="muted">' +
-        esc(o.customer_email) + '</div></td><td>' + esc(wants) + '</td><td>' + (o.files || 0) + '</td><td>' +
+        esc(shownEmail(o.customer_email)) + '</div></td><td>' + esc(wants) + '</td><td>' + (o.files || 0) + '</td><td>' +
         pill(o.status) + '</td><td class="muted">' + ago(o.created_at) + '</td></tr>';
     });
-    if (!d.orders.length) html += '<tr><td colspan="6" class="muted">No orders match.</td></tr>';
-    html += '</table>';
+    html += '</table></div>';
+    if (d.orders.length >= 200) html += '<p class="muted">Showing the newest 200. Narrow it with the search box.</p>';
     view.innerHTML = html;
   }).catch(showError);
+}
+// Walk-ins are stored with a placeholder address so the customer list can key
+// on something. It is not an address anybody should ever see or write to.
+function shownEmail(email) {
+  var e = String(email || '');
+  return /@a3d\.local$/i.test(e) ? 'no email' : e;
+}
+function hasEmail(email) {
+  return !!String(email || '') && !/@a3d\.local$/i.test(String(email));
 }
 function applyFilter() {
   sessionStorage.setItem('a3d.status', document.getElementById('st').value);
   sessionStorage.setItem('a3d.q', document.getElementById('q').value);
   orders();
+}
+function clearFilter() {
+  sessionStorage.removeItem('a3d.status');
+  sessionStorage.removeItem('a3d.q');
+  orders();
+}
+
+// ------------------------------------------------------------- new order
+// The counter case: someone walks in, so there is no website form to wait for.
+function newOrder() {
+  var name = prompt('Customer name');
+  if (name === null) return;
+  name = name.trim();
+  if (!name) { alert('A name is needed.'); return; }
+  var email = prompt('Email address (leave empty for a walk-in)', '');
+  if (email === null) return;
+  var what = prompt('What are they after? (this becomes the note)', '');
+  if (what === null) return;
+  api('/orders', { method: 'POST', body: JSON.stringify({ name: name, email: email.trim(), notes: what }) })
+    .then(function (r) { location.hash = '#/order/' + r.id; })
+    .catch(function (e) { alert(e.message); });
 }
 
 // ----------------------------------------------------------- order detail
@@ -261,8 +351,11 @@ function orderDetail(id) {
   api('/orders/' + id).then(function (d) {
     current = d;
     var o = d.order;
-    var html = '<h1>' + esc(o.ref) + ' ' + pill(o.status) + '</h1><p class="sub">' +
-      esc(o.customer_name) + ' &middot; ' + ago(o.created_at) + '</p><div class="grid2"><div>';
+    var html = '<div class="head"><div><h1>' + esc(o.ref) + ' ' + pill(o.status) + '</h1>' +
+      '<p class="sub">' + esc(o.customer_name) + ' &middot; ' + ago(o.created_at) +
+      (o.source === 'counter' ? ' &middot; added by hand' : '') + '</p></div>' +
+      '<button class="danger" onclick="deleteOrder(' + o.id + ',\'' + esc(o.ref) + '\')">Delete order</button></div>' +
+      '<div class="grid2"><div>';
 
     html += '<div class="card"><h2 style="margin-top:0">The request</h2><dl class="kv">';
     if (o.mode === 'dev') {
@@ -277,12 +370,12 @@ function orderDetail(id) {
 
     html += '<h2>Files</h2>';
     if (d.files.length) {
-      html += '<table>';
+      html += '<div class="scroll"><table>';
       d.files.forEach(function (f) {
-        html += '<tr><td><a href="/api/admin/files/' + f.id + '">' + esc(f.filename) + '</a></td>' +
+        html += '<tr><td><a class="linkish" href="/api/admin/files/' + f.id + '">' + esc(f.filename) + '</a></td>' +
           '<td class="right muted">' + (f.bytes > 1048576 ? (f.bytes / 1048576).toFixed(1) + ' MB' : Math.round(f.bytes / 1024) + ' KB') + '</td></tr>';
       });
-      html += '</table>';
+      html += '</table></div>';
     } else {
       html += '<p class="muted">No files uploaded with this request.</p>';
     }
@@ -294,24 +387,33 @@ function orderDetail(id) {
         html += '<div class="card" style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:center">' +
           '<b style="font-size:19px">' + money(qt.total_cents) + '</b> ' + pill(qt.status) + '</div>';
         if (qlines.length) {
-          html += '<table style="margin-top:10px">';
+          html += '<div class="scroll"><table style="margin-top:10px">';
           qlines.forEach(function (l) {
             html += '<tr><td>' + l.qty + ' &times; ' + esc(l.description) + '</td><td class="right">' + money(l.line_cents) + '</td></tr>';
           });
-          html += '</table>';
+          html += '</table></div>';
         }
+        // Showing the split matters now that OB is on some quotes and not
+        // others: at a glance he can see which kind of quote this was.
+        html += '<div class="qsum" style="margin-top:10px">' +
+          '<div class="qrow"><span>Subtotal</span><b>' + money(qt.subtotal_cents) + '</b></div>' +
+          '<div class="qrow"><span>OB</span><b>' + (qt.tax_cents ? money(qt.tax_cents) : 'not charged') + '</b></div>' +
+          '<div class="qrow total"><span>Total</span><b>' + money(qt.total_cents) + '</b></div></div>';
         if (qt.sentoo_url) {
-          html += '<div class="muted" style="margin-top:8px">Pay link: <a href="' + esc(qt.sentoo_url) +
-            '" target="_blank" rel="noopener">' + esc(qt.sentoo_url) + '</a>' +
-            (qt.sentoo_status === 'mock' ? ' <em>(sandbox placeholder)</em>' : '') + '</div>';
+          html += '<div class="bar" style="margin-top:10px;margin-bottom:0">' +
+            '<a class="linkish" href="' + esc(qt.sentoo_url) + '" target="_blank" rel="noopener">Open pay link</a>' +
+            '<button class="ghost small" onclick="copyValue(this,\'' + esc(qt.sentoo_url) + '\')">Copy link</button>' +
+            (qt.sentoo_status === 'mock' ? '<span class="muted">sandbox, not real money</span>' : '') + '</div>';
         }
         if (qt.paid_at) {
           html += '<div class="muted" style="margin-top:6px;color:var(--ok)">Paid ' + ago(qt.paid_at) + '</div>';
         }
         html += '<div class="bar" style="margin-top:12px">';
         if (qt.status !== 'paid') {
-          html += '<button class="primary" onclick="sendQuote(' + qt.id + ',' + o.id + ')">' +
-            (qt.status === 'sent' ? 'Send again' : 'Send to customer') + '</button>';
+          html += hasEmail(o.customer_email)
+            ? '<button class="primary" onclick="sendQuote(' + qt.id + ',' + o.id + ')">' +
+              (qt.status === 'sent' ? 'Send again' : 'Send to customer') + '</button>'
+            : '<button class="primary" disabled title="This customer has no email address">Send to customer</button>';
           if (qt.sentoo_uid) html += '<button onclick="checkPayment(' + qt.id + ',' + o.id + ')">Check payment</button>';
           html += '<button onclick="markPaid(' + qt.id + ',' + o.id + ')">Mark paid by hand</button>';
         }
@@ -324,7 +426,7 @@ function orderDetail(id) {
           html += '<div class="muted" style="color:var(--warn)">QuickBooks did not accept this one: ' +
             esc(qt.qbo_error) + '</div>';
         }
-        if (d.gmail === false) {
+        if (d.gmail === false && hasEmail(o.customer_email)) {
           html += '<div class="muted">Email is not connected yet, so Send will hand you the payment link instead.</div>';
         }
         html += '</div>';
@@ -347,13 +449,20 @@ function orderDetail(id) {
 
     html += '</div><div>';
     html += '<div class="card"><h2 style="margin-top:0">Customer</h2><dl class="kv">' +
-      '<dt>Name</dt><dd>' + esc(o.customer_name) + '</dd>' +
-      '<dt>Email</dt><dd><a href="mailto:' + esc(o.customer_email) + '">' + esc(o.customer_email) + '</a></dd>' +
-      '<dt>Phone</dt><dd>' + (o.customer_phone ? '<a href="https://wa.me/' + esc(String(o.customer_phone).replace(/[^0-9]/g, '')) + '">' + esc(o.customer_phone) + '</a>' : '-') + '</dd></dl>';
+      '<dt>Name</dt><dd><a class="linkish" href="#/customer/' + o.customer_id + '">' + esc(o.customer_name) + '</a></dd>' +
+      '<dt>Email</dt><dd>' + (hasEmail(o.customer_email)
+        ? '<a class="linkish" href="mailto:' + esc(o.customer_email) + '">' + esc(o.customer_email) + '</a>'
+        : '<span class="muted">no email</span>') + '</dd>' +
+      '<dt>Phone</dt><dd>' + (o.customer_phone
+        ? '<a class="linkish" href="https://wa.me/' + esc(String(o.customer_phone).replace(/[^0-9]/g, '')) + '">' + esc(o.customer_phone) + '</a>'
+        : '-') + '</dd></dl>';
+    // Which card in his real books this order will land on. Left to itself the
+    // matching is good but not psychic, so he can pin it by hand.
+    html += '<div class="picked" id="qbolink"></div>';
     if (d.history.length) {
-      html += '<p class="muted" style="margin-bottom:4px">Earlier orders</p>';
+      html += '<p class="muted" style="margin-bottom:4px;margin-top:12px">Earlier orders</p>';
       d.history.forEach(function (h) {
-        html += '<div class="muted"><a href="#/order/' + h.id + '">' + esc(h.ref) + '</a> ' + esc(h.status) + '</div>';
+        html += '<div class="muted"><a class="linkish" href="#/order/' + h.id + '">' + esc(h.ref) + '</a> ' + esc(h.status) + '</div>';
       });
     }
     html += '</div>';
@@ -373,7 +482,59 @@ function orderDetail(id) {
 
     view.innerHTML = html;
     addLine();
+    showQboLink(o);
   }).catch(showError);
+}
+
+function showQboLink(o) {
+  var box = document.getElementById('qbolink');
+  if (!box) return;
+  var pinned = o.customer_qbo_id;
+  box.innerHTML = (pinned
+    ? 'QuickBooks customer <b>#' + esc(pinned) + '</b>. '
+    : 'QuickBooks customer is matched on email, then name, when the quote is made. ') +
+    '<button class="ghost small" onclick="pickQboCustomer(' + o.customer_id + ',\'' +
+    esc(String(o.customer_name).replace(/'/g, '')) + '\')">' + (pinned ? 'Change' : 'Pin one') + '</button>';
+}
+
+// Searches his real QuickBooks and pins the chosen card to this customer, so
+// Papagayo the hotel and Papagayo the second card he made by accident stop
+// being two histories.
+function pickQboCustomer(customerId, suggested) {
+  var term = prompt('Search your QuickBooks customers', suggested || '');
+  if (term === null) return;
+  api('/qbo/customers?q=' + encodeURIComponent(term)).then(function (r) {
+    var list = r.customers || [];
+    if (!list.length) { alert('Nothing in QuickBooks matches that.'); return; }
+    var msg = 'Which one?\n\n';
+    list.forEach(function (c, i) { msg += (i + 1) + '. ' + c.name + (c.email ? '  (' + c.email + ')' : '') + '\n'; });
+    msg += '\nType a number, or 0 to unpin.';
+    var pick = prompt(msg, '1');
+    if (pick === null) return;
+    var n = Number(pick);
+    var chosen = n === 0 ? '' : (list[n - 1] && list[n - 1].id);
+    if (n !== 0 && !chosen) { alert('That was not one of the numbers.'); return; }
+    api('/customers/' + customerId + '/qbo', { method: 'POST', body: JSON.stringify({ qbo_customer_id: chosen }) })
+      .then(function () { route(); })
+      .catch(function (e) { alert(e.message); });
+  }).catch(function (e) { alert(e.message); });
+}
+
+function copyValue(btn, text) {
+  navigator.clipboard.writeText(text).then(function () {
+    var was = btn.textContent;
+    btn.textContent = 'Copied';
+    setTimeout(function () { btn.textContent = was; }, 1400);
+  }, function () { prompt('Copy this', text); });
+}
+
+function deleteOrder(id, ref) {
+  if (!confirm('Delete ' + ref + ' for good? Its quotes, files and history go with it.\n\n' +
+    'Anything already in QuickBooks stays there, this only clears the back office.')) return;
+  fetch('/api/admin/orders/' + id, { method: 'DELETE' }).then(function (r) {
+    if (!r.ok) return r.json().then(function (j) { throw new Error(j.error || 'Could not delete it'); });
+    location.hash = '#/orders';
+  }).catch(function (e) { alert(e.message); });
 }
 
 var PRICES = [];
@@ -514,13 +675,49 @@ function addNote(id) {
 // ------------------------------------------------------------- customers
 function customers() {
   api('/customers').then(function (d) {
-    var html = '<h1>Customers</h1><table><tr><th>Name</th><th>Email</th><th>Phone</th><th class="right">Orders</th><th>Last order</th></tr>';
+    var html = '<h1>Customers</h1><p class="sub">Everyone who has ever asked for something.</p>';
+    if (!d.customers.length) {
+      view.innerHTML = html + empty('No customers yet', 'The first website enquiry creates one.');
+      return;
+    }
+    html += '<div class="scroll"><table><tr><th>Name</th><th>Email</th><th>Phone</th><th class="right">Orders</th><th>Last order</th></tr>';
     d.customers.forEach(function (c) {
-      html += '<tr><td>' + esc(c.name) + '</td><td>' + esc(c.email) + '</td><td>' + esc(c.phone || '-') +
+      html += '<tr class="row" onclick="location.hash=\'#/customer/' + c.id + '\'"><td><b>' + esc(c.name) + '</b></td><td>' +
+        esc(shownEmail(c.email)) + '</td><td>' + esc(c.phone || '-') +
         '</td><td class="right">' + c.orders + '</td><td class="muted">' + (c.last_order ? ago(c.last_order) : '-') + '</td></tr>';
     });
-    if (!d.customers.length) html += '<tr><td colspan="5" class="muted">No customers yet.</td></tr>';
-    html += '</table>';
+    html += '</table></div>';
+    view.innerHTML = html;
+  }).catch(showError);
+}
+
+// One customer, everything they have ever ordered, and what they have paid.
+// The old list was a dead end: their name was there and led nowhere.
+function customerDetail(id) {
+  api('/customers/' + id).then(function (d) {
+    var c = d.customer;
+    var html = '<h1>' + esc(c.name) + '</h1><p class="sub">Customer since ' + esc(String(c.created_at || '').slice(0, 10)) + '</p>';
+    html += '<div class="grid2"><div><h2 style="margin-top:0">Orders</h2>';
+    if (d.orders.length) {
+      html += '<div class="scroll"><table><tr><th>Ref</th><th>Wants</th><th>Status</th><th>When</th></tr>';
+      d.orders.forEach(function (o) {
+        html += '<tr class="row" onclick="location.hash=\'#/order/' + o.id + '\'"><td><b>' + esc(o.ref) + '</b></td><td>' +
+          esc((o.material || 'Print') + (o.quantity ? ' x' + o.quantity : '')) + '</td><td>' + pill(o.status) +
+          '</td><td class="muted">' + ago(o.created_at) + '</td></tr>';
+      });
+      html += '</table></div>';
+    } else {
+      html += empty('Nothing ordered yet', '');
+    }
+    html += '</div><div><div class="card"><h2 style="margin-top:0">Details</h2><dl class="kv">' +
+      '<dt>Email</dt><dd>' + (hasEmail(c.email)
+        ? '<a class="linkish" href="mailto:' + esc(c.email) + '">' + esc(c.email) + '</a>'
+        : '<span class="muted">no email</span>') + '</dd>' +
+      '<dt>Phone</dt><dd>' + (c.phone
+        ? '<a class="linkish" href="https://wa.me/' + esc(String(c.phone).replace(/[^0-9]/g, '')) + '">' + esc(c.phone) + '</a>'
+        : '-') + '</dd>' +
+      '<dt>Company</dt><dd>' + esc(c.company || '-') + '</dd>' +
+      '<dt>Paid so far</dt><dd><b>' + money(d.paidCents) + '</b></dd></dl></div></div></div>';
     view.innerHTML = html;
   }).catch(showError);
 }
@@ -528,15 +725,23 @@ function customers() {
 // ---------------------------------------------------------------- prices
 function prices() {
   api('/prices').then(function (d) {
-    var html = '<h1>Price list</h1><p class="sub">These are the repeat items. Leave a price empty and the public page shows "on request".</p>' +
-      '<table id="pl"><tr><th>Item</th><th>Description</th><th style="width:130px">Price (' + CUR + ')</th><th>Shown</th></tr>';
+    var html = '<div class="head"><div><h1>Price list</h1>' +
+      '<p class="sub">The repeat items. Leave a price empty and the public page shows "on request".</p></div>' +
+      '<button onclick="addPrice()">Add item</button></div>';
+    if (!d.prices.length) {
+      view.innerHTML = html + empty('No items yet', 'Add the things you quote over and over, so a quote is two taps.');
+      return;
+    }
+    html += '<div class="scroll"><table id="pl"><tr><th>Item</th><th>Description</th><th style="width:130px">Price (' + CUR + ')</th><th>Shown</th><th style="width:40px"></th></tr>';
     d.prices.forEach(function (p) {
       html += '<tr data-id="' + p.id + '"><td><input type="text" class="n" value="' + esc(p.name) + '"></td>' +
         '<td><input type="text" class="ds" value="' + esc(p.description || '') + '"></td>' +
         '<td><input type="number" class="u" step="0.01" min="0" value="' + (p.unit_cents === null ? '' : (p.unit_cents / 100).toFixed(2)) + '"></td>' +
-        '<td><input type="checkbox" class="a"' + (p.active ? ' checked' : '') + '></td></tr>';
+        '<td><input type="checkbox" class="a"' + (p.active ? ' checked' : '') + '></td>' +
+        '<td><button class="ghost" title="Remove this item" onclick="deletePrice(' + p.id + ',\'' +
+        esc(String(p.name).replace(/'/g, '')) + '\')">&times;</button></td></tr>';
     });
-    html += '</table><div class="bar" style="margin-top:14px"><button class="primary" onclick="savePrices()">Save prices</button>' +
+    html += '</table></div><div class="bar" style="margin-top:14px"><button class="primary" onclick="savePrices()">Save prices</button>' +
       '<span class="muted">The public prices page picks these up on the next publish.</span></div>';
     view.innerHTML = html;
   }).catch(showError);
@@ -555,7 +760,30 @@ function savePrices() {
     });
   }
   api('/prices', { method: 'POST', body: JSON.stringify({ prices: out }) })
-    .then(function () { alert('Saved.'); }).catch(showError);
+    .then(function () { flashOnce('Price list saved.'); }).catch(showError);
+}
+function addPrice() {
+  var name = prompt('What is the item called?');
+  if (name === null) return;
+  if (!name.trim()) return;
+  api('/prices/add', { method: 'POST', body: JSON.stringify({ name: name.trim() }) })
+    .then(function () { prices(); }).catch(showError);
+}
+function deletePrice(id, name) {
+  if (!confirm('Remove "' + name + '" from the price list? Quotes already made keep their lines.')) return;
+  fetch('/api/admin/prices/' + id, { method: 'DELETE' }).then(function (r) {
+    if (!r.ok) throw new Error('Could not remove it');
+    prices();
+  }).catch(function (e) { alert(e.message); });
+}
+
+// A quiet banner beats an alert box you have to dismiss on a phone.
+function flashOnce(msg) {
+  var el = document.createElement('div');
+  el.className = 'flash ok';
+  el.textContent = msg;
+  view.insertBefore(el, view.firstChild);
+  setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 2600);
 }
 
 // -------------------------------------------------------------- settings
@@ -730,6 +958,7 @@ function route() {
   if (parts[0] === 'orders') return orders();
   if (parts[0] === 'order' && parts[1]) return orderDetail(Number(parts[1]));
   if (parts[0] === 'customers') return customers();
+  if (parts[0] === 'customer' && parts[1]) return customerDetail(Number(parts[1]));
   if (parts[0] === 'prices') return prices();
   if (parts[0].split('?')[0] === 'settings') return settings();
   return dashboard();
