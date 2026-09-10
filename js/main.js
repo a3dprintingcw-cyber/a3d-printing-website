@@ -326,6 +326,77 @@
     });
   }
 
+  /* ---------------- Prices page, straight from the back office ----------------
+     Every item switched on under "Website" in the back office price list,
+     with its price. If the back office cannot be reached the page says so and
+     points at WhatsApp and the quote form, which sit right below. */
+  function priceText(cents, currency) {
+    if (cents === null || cents === undefined) return null;
+    var n = cents / 100;
+    var shown = n % 1 === 0 ? String(n) : n.toFixed(2);
+    return currency + " " + shown;
+  }
+  function priceCard(item, currency) {
+    var card = document.createElement("div");
+    card.className = "card price-card";
+    var h = document.createElement("h3");
+    h.textContent = item.name;
+    card.appendChild(h);
+    if (item.description) {
+      var p = document.createElement("p");
+      p.textContent = item.description;
+      card.appendChild(p);
+    }
+    var price = document.createElement("div");
+    var txt = priceText(item.unit_cents, currency);
+    if (txt) {
+      price.className = "price";
+      var from = document.createElement("span");
+      from.textContent = "from";
+      price.appendChild(from);
+      price.appendChild(document.createTextNode(" " + txt));
+    } else {
+      price.className = "price price-tbd";
+      price.textContent = "Price on request";
+    }
+    card.appendChild(price);
+    return card;
+  }
+  function priceNote(grid, title, text) {
+    grid.innerHTML = "";
+    var card = document.createElement("div");
+    card.className = "card price-card";
+    var h = document.createElement("h3");
+    h.textContent = title;
+    var p = document.createElement("p");
+    p.textContent = text;
+    card.appendChild(h);
+    card.appendChild(p);
+    grid.appendChild(card);
+  }
+  function initLivePrices() {
+    var grid = document.querySelector("[data-live-prices]");
+    if (!grid) return;
+    if (!cfg.apiBase) {
+      priceNote(grid, "Prices on request", "Ask us on WhatsApp or send the quote form and you'll get a price back, usually the same day.");
+      return;
+    }
+    fetch(cfg.apiBase + "/prices", { headers: { accept: "application/json" } })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (d) {
+        var items = (d && d.prices) || [];
+        if (!items.length) {
+          priceNote(grid, "Prices on request", "We're updating our price list. Ask us on WhatsApp or send the quote form and you'll get a price back, usually the same day.");
+          return;
+        }
+        grid.innerHTML = "";
+        items.forEach(function (item) { grid.appendChild(priceCard(item, d.currency || "XCG")); });
+      })
+      .catch(function () {
+        priceNote(grid, "Couldn't load prices", "Our price list didn't load just now. Try again in a moment, or ask us on WhatsApp for a price.");
+      });
+  }
+
   /* ---------------- Init ---------------- */
   document.addEventListener("DOMContentLoaded", function () {
     initTheme();
@@ -336,6 +407,7 @@
     initForm("quote-form-print");
     initForm("quote-form-dev");
     initQuickQuoteSync();
+    initLivePrices();
     initReveal();
     syncThemeColor();
 
