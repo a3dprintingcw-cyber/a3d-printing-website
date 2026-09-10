@@ -65,6 +65,33 @@ async function handlePublicPrices(env) {
   return json({ currency: env.CURRENCY || 'XCG', prices: rows }, 200, { 'cache-control': 'public, max-age=60' });
 }
 
+/**
+ * Everything that has to go when orders are deleted: the uploaded files in R2
+ * straight away, and the database rows as statements for one batch, so a
+ * failure part way leaves nothing half deleted.
+ *
+ * Deliberately does not touch QuickBooks. An estimate or invoice that has been
+ * raised is an accounting record; it is not this button's business to reach
+ * into his books. The back office forgets, the books do not.
+ */
+async function orderDeleteStatements(env, orderIds) {
+  const stmts = [];
+  for (const id of orderIds) {
+    const rows = await env.DB.prepare('SELECT r2_key FROM order_files WHERE order_id = ?').bind(id).all();
+    for (const f of rows.results || []) {
+      if (f.r2_key) await env.FILES.delete(f.r2_key).catch(() => {});
+    }
+    stmts.push(
+      env.DB.prepare('DELETE FROM quote_lines WHERE quote_id IN (SELECT id FROM quotes WHERE order_id = ?)').bind(id),
+      env.DB.prepare('DELETE FROM quotes WHERE order_id = ?').bind(id),
+      env.DB.prepare('DELETE FROM order_files WHERE order_id = ?').bind(id),
+      env.DB.prepare('DELETE FROM order_events WHERE order_id = ?').bind(id),
+      env.DB.prepare('DELETE FROM orders WHERE id = ?').bind(id),
+    );
+  }
+  return stmts;
+}
+
 async function visitorHash(request, env) {
   // Daily rotating, salted hash of IP + user agent. Enough to count people
   // once per day, useless for identifying anyone, and it expires by itself.
@@ -697,20 +724,7 @@ export async function adminRoutes(request, env, url, email) {
     const id = Number(delMatch[1]);
     const order = await env.DB.prepare('SELECT * FROM orders WHERE id = ?').bind(id).first();
     if (!order) return bad('No such order', 404);
-    // Deliberately does not touch QuickBooks. An estimate or invoice that has
-    // been raised is an accounting record; it is not this button's business to
-    // reach into his books. The back office forgets, the books do not.
-    const rows = await env.DB.prepare('SELECT r2_key FROM order_files WHERE order_id = ?').bind(id).all();
-    for (const f of rows.results || []) {
-      if (f.r2_key) await env.FILES.delete(f.r2_key).catch(() => {});
-    }
-    await env.DB.batch([
-      env.DB.prepare('DELETE FROM quote_lines WHERE quote_id IN (SELECT id FROM quotes WHERE order_id = ?)').bind(id),
-      env.DB.prepare('DELETE FROM quotes WHERE order_id = ?').bind(id),
-      env.DB.prepare('DELETE FROM order_files WHERE order_id = ?').bind(id),
-      env.DB.prepare('DELETE FROM order_events WHERE order_id = ?').bind(id),
-      env.DB.prepare('DELETE FROM orders WHERE id = ?').bind(id),
-    ]);
+    await env.DB.batch(await orderDeleteStatements(env, [id]));
     return json({ ok: true, ref: order.ref });
   }
 
@@ -736,6 +750,21 @@ export async function adminRoutes(request, env, url, email) {
        JOIN orders o ON o.id = q.order_id WHERE o.customer_id = ? AND q.paid_at IS NOT NULL`,
     ).bind(id).first();
     return json({ customer, orders: orders.results, paidCents: spend ? spend.total : 0 });
+  }
+
+  // Deleting a customer takes their orders with it, because an order cannot
+  // exist without its customer. Built for clearing out test customers; the
+  // screen spells out how many orders go and warns loudly if any were paid.
+  // QuickBooks is left alone, exactly as with deleting a single order.
+  if (custMatch && method === 'DELETE') {
+    const id = Number(custMatch[1]);
+    const customer = await env.DB.prepare('SELECT * FROM customers WHERE id = ?').bind(id).first();
+    if (!customer) return bad('No such customer', 404);
+    const orders = (await env.DB.prepare('SELECT id FROM orders WHERE customer_id = ?').bind(id).all()).results || [];
+    const stmts = await orderDeleteStatements(env, orders.map((o) => o.id));
+    stmts.push(env.DB.prepare('DELETE FROM customers WHERE id = ?').bind(id));
+    await env.DB.batch(stmts);
+    return json({ ok: true, name: customer.name, orders: orders.length });
   }
 
   // Searching his real QuickBooks by name, so an order can be pinned to the
