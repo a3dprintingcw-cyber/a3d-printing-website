@@ -454,12 +454,17 @@ export async function adminRoutes(request, env, url, email) {
   }
 
   if (p === '/qbo/taxcode' && method === 'POST') {
-    const body = await req.json().catch(() => ({}));
+    const body = await request.json().catch(() => ({}));
     const id = String(body.id || '');
+    // The quote total and the QuickBooks invoice have to agree to the cent, or
+    // the customer pays one number while the books expect another. So the rate
+    // the quote charges is taken from the code itself rather than typed in
+    // twice and left to drift apart.
     if (!id) {
       await setSetting(env, 'qbo_tax_code', null);
       await setSetting(env, 'qbo_tax_code_name', null);
-      return json({ ok: true, chosen: '' });
+      await setSetting(env, 'tax_rate_pct', '0');
+      return json({ ok: true, chosen: '', pct: 0 });
     }
     const conf = await qbo.qboConfig(env);
     const codes = await qbo.taxCodes(env, conf).catch(() => []);
@@ -467,7 +472,8 @@ export async function adminRoutes(request, env, url, email) {
     if (!hit) return bad('QuickBooks does not have that tax code.');
     await setSetting(env, 'qbo_tax_code', hit.id);
     await setSetting(env, 'qbo_tax_code_name', hit.name);
-    return json({ ok: true, chosen: hit.id, name: hit.name });
+    await setSetting(env, 'tax_rate_pct', String(hit.pct || 0));
+    return json({ ok: true, chosen: hit.id, name: hit.name, pct: hit.pct || 0 });
   }
 
   if (p === '/qbo/disconnect' && method === 'POST') {
