@@ -39,7 +39,10 @@ export const ADMIN_HTML = String.raw`<!doctype html>
   .nav a:hover { background:var(--card); color:var(--ink); }
   .nav a.on { background:var(--blue); color:#fff; }
   .side .who { margin-top:26px; font-size:12px; color:var(--ink-soft); line-height:1.5; }
-  main { padding:26px 30px 60px; max-width:1100px; }
+  /* min-width:0, because a grid item defaults to min-width:auto and will grow
+     to fit the widest table inside it, which defeats every .scroll box and
+     drags the whole page sideways on a phone. */
+  main { padding:26px 30px 60px; max-width:1100px; min-width:0; }
   h1 { font-size:24px; margin:0 0 4px; letter-spacing:-.01em; }
   h2 { font-size:17px; margin:28px 0 12px; }
   .sub { color:var(--ink-soft); font-size:14px; margin:0 0 22px; }
@@ -92,7 +95,7 @@ export const ADMIN_HTML = String.raw`<!doctype html>
     body { overflow-x:hidden; }
     /* auto 1fr, or the grid splits the screen and the top bar grows into a
        half-empty panel that pushes the actual work below the fold. */
-    .layout { grid-template-columns:1fr; grid-template-rows:auto 1fr; }
+    .layout { grid-template-columns:minmax(0,1fr); grid-template-rows:auto 1fr; }
     .side { position:sticky; top:0; z-index:20; padding:10px 12px 8px;
             border-right:none; border-bottom:1px solid var(--border);
             background:var(--paper-soft); }
@@ -133,6 +136,36 @@ export const ADMIN_HTML = String.raw`<!doctype html>
   label.inline select { padding:8px 10px; border-radius:9px; border:1px solid var(--border);
     background:var(--paper); color:var(--ink); font-size:14px; }
   #view .card + .card { margin-top:16px; }
+  /* The website switch. A real checkbox underneath, so it keeps keyboard
+     focus and a screen reader still hears "checkbox, checked". */
+  .switch { position:relative; display:inline-block; width:42px; height:24px; cursor:pointer; }
+  .switch input { position:absolute; opacity:0; width:100%; height:100%; margin:0; cursor:pointer; }
+  .switch span { position:absolute; inset:0; border-radius:999px; background:var(--border); transition:background .15s; pointer-events:none; }
+  .switch span::after { content:""; position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%;
+    background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.25); transition:transform .15s; }
+  .switch input:checked + span { background:var(--ok); }
+  .switch input:checked + span::after { transform:translateX(18px); }
+  .switch input:focus-visible + span { outline:2px solid var(--blue); outline-offset:2px; }
+  /* On a phone the price list stops being a table: each item is a small card
+     with the name and description on top and price, website switch, quotes and
+     remove on one line, so the switch is always under a thumb and never off
+     the right edge of the screen. */
+  @media (max-width:820px) {
+    .scroll table.pl { min-width:0; }
+    table.pl, table.pl tbody, table.pl tr, table.pl td { display:block; width:100%; }
+    table.pl tr:first-child { display:none; }
+    table.pl tr[hidden] { display:none; }
+    table.pl tr[data-id] { display:grid; grid-template-columns:minmax(0,1fr) auto auto auto; gap:8px 12px;
+      align-items:center; padding:12px 14px; border-top:1px solid var(--border); }
+    table.pl tr[data-id]:nth-child(2) { border-top:none; }
+    table.pl td { padding:0; border:none; width:auto; }
+    table.pl td:nth-child(1), table.pl td:nth-child(2) { grid-column:1 / -1; }
+    table.pl td input[type=text], table.pl td input[type=number] { width:100%; }
+    table.pl td[data-l] { display:flex; flex-direction:column; align-items:center; gap:3px; }
+    table.pl td[data-l]::before { content:attr(data-l); font-size:10.5px; text-transform:uppercase;
+      letter-spacing:.05em; color:var(--ink-soft); }
+  }
+  .savebar { position:sticky; bottom:0; margin-top:14px; padding:12px 0; background:var(--paper); }
   .form label { display:block; margin:10px 0; font-size:13px; color:var(--ink-soft); }
   .form label.check { display:flex; align-items:center; gap:8px; margin-top:14px; }
   .form label.check input { display:inline-block; width:auto; margin:0; }
@@ -725,31 +758,65 @@ function customerDetail(id) {
 }
 
 // ---------------------------------------------------------------- prices
+// Two tables, one screen: what the public Prices page is showing right now,
+// and everything else. Flipping an item's website switch moves its row across
+// straight away so the split always matches the switches, and nothing reaches
+// the site until Save.
+function priceRow(p) {
+  return '<tr data-id="' + p.id + '"><td><input type="text" class="n" aria-label="Item" value="' + esc(p.name) + '"></td>' +
+    '<td><input type="text" class="ds" aria-label="Description" placeholder="Description" value="' + esc(p.description || '') + '"></td>' +
+    '<td><input type="number" class="u" aria-label="Price" step="0.01" min="0" value="' + (p.unit_cents === null ? '' : (p.unit_cents / 100).toFixed(2)) + '"></td>' +
+    '<td data-l="Website"><label class="switch" title="Show this item and its price on the website">' +
+      '<input type="checkbox" class="w" onchange="moveWebRow(this)"' + (p.web ? ' checked' : '') + '><span></span></label></td>' +
+    '<td data-l="Quotes"><input type="checkbox" class="a" title="Offer this item in the quote builder"' + (p.active ? ' checked' : '') + '></td>' +
+    '<td><button class="ghost" title="Remove this item" onclick="deletePrice(' + p.id + ',\'' +
+    esc(String(p.name).replace(/'/g, '')) + '\')">&times;</button></td></tr>';
+}
+function priceTable(id, rows, emptyText) {
+  return '<div class="scroll"><table class="pl" id="' + id + '"><tr><th>Item</th><th>Description</th>' +
+    '<th style="width:130px">Price (' + CUR + ')</th><th style="width:90px">Website</th><th style="width:70px">Quotes</th><th style="width:40px"></th></tr>' +
+    rows.map(priceRow).join('') +
+    '<tr class="none"' + (rows.length ? ' hidden' : '') + '><td colspan="6" class="muted">' + emptyText + '</td></tr>' +
+    '</table></div>';
+}
 function prices() {
   api('/prices').then(function (d) {
     var html = '<div class="head"><div><h1>Price list</h1>' +
-      '<p class="sub">The repeat items. Leave a price empty and the public page shows "on request".</p></div>' +
+      '<p class="sub">Switch an item on under Website and it shows with its price on a3dprinting.com/prices after you save. ' +
+      'Quotes decides what the quote builder offers. An empty price shows as "on request".</p></div>' +
       '<button onclick="addPrice()">Add item</button></div>';
     if (!d.prices.length) {
       view.innerHTML = html + empty('No items yet', 'Add the things you quote over and over, so a quote is two taps.');
       return;
     }
-    html += '<div class="scroll"><table id="pl"><tr><th>Item</th><th>Description</th><th style="width:130px">Price (' + CUR + ')</th><th>Shown</th><th style="width:40px"></th></tr>';
-    d.prices.forEach(function (p) {
-      html += '<tr data-id="' + p.id + '"><td><input type="text" class="n" value="' + esc(p.name) + '"></td>' +
-        '<td><input type="text" class="ds" value="' + esc(p.description || '') + '"></td>' +
-        '<td><input type="number" class="u" step="0.01" min="0" value="' + (p.unit_cents === null ? '' : (p.unit_cents / 100).toFixed(2)) + '"></td>' +
-        '<td><input type="checkbox" class="a"' + (p.active ? ' checked' : '') + '></td>' +
-        '<td><button class="ghost" title="Remove this item" onclick="deletePrice(' + p.id + ',\'' +
-        esc(String(p.name).replace(/'/g, '')) + '\')">&times;</button></td></tr>';
-    });
-    html += '</table></div><div class="bar" style="margin-top:14px"><button class="primary" onclick="savePrices()">Save prices</button>' +
-      '<span class="muted">The public prices page picks these up on the next publish.</span></div>';
+    var on = d.prices.filter(function (p) { return p.web; });
+    var off = d.prices.filter(function (p) { return !p.web; });
+    html += '<h2>On the website <span class="muted" id="webcount">(' + on.length + ')</span></h2>' +
+      priceTable('pl-web', on, 'Nothing is on the website yet. Switch an item on below and save.');
+    html += '<h2>Not on the website <span class="muted" id="offcount">(' + off.length + ')</span></h2>' +
+      priceTable('pl-off', off, 'Every item is on the website.');
+    html += '<div class="bar savebar"><button class="primary" onclick="savePrices()">Save prices</button>' +
+      '<span class="muted" id="plstate">Saved changes reach the website within a minute.</span></div>';
     view.innerHTML = html;
   }).catch(showError);
 }
+function moveWebRow(box) {
+  var tr = box.closest('tr');
+  var target = document.getElementById(box.checked ? 'pl-web' : 'pl-off');
+  var tbody = target.tBodies[0] || target;
+  var none = tbody.querySelector('tr.none');
+  tbody.insertBefore(tr, none);
+  ['pl-web', 'pl-off'].forEach(function (id) {
+    var t = document.getElementById(id);
+    var n = t.querySelectorAll('tr[data-id]').length;
+    t.querySelector('tr.none').hidden = n > 0;
+    document.getElementById(id === 'pl-web' ? 'webcount' : 'offcount').textContent = '(' + n + ')';
+  });
+  var st = document.getElementById('plstate');
+  if (st) { st.textContent = 'Unsaved changes. Press Save prices to update the website.'; st.style.color = 'var(--warn)'; }
+}
 function savePrices() {
-  var rows = document.querySelectorAll('#pl tr[data-id]');
+  var rows = document.querySelectorAll('table.pl tr[data-id]');
   var out = [];
   for (var i = 0; i < rows.length; i++) {
     var u = rows[i].querySelector('.u').value;
@@ -759,10 +826,15 @@ function savePrices() {
       description: rows[i].querySelector('.ds').value,
       unit_cents: u === '' ? null : Math.round(parseFloat(u) * 100),
       active: rows[i].querySelector('.a').checked,
+      web: rows[i].querySelector('.w').checked,
     });
   }
   api('/prices', { method: 'POST', body: JSON.stringify({ prices: out }) })
-    .then(function () { flashOnce('Price list saved.'); }).catch(showError);
+    .then(function () {
+      flashOnce('Price list saved. The website picks it up within a minute.');
+      var st = document.getElementById('plstate');
+      if (st) { st.textContent = 'Saved changes reach the website within a minute.'; st.style.color = ''; }
+    }).catch(showError);
 }
 function addPrice() {
   var name = prompt('What is the item called?');
