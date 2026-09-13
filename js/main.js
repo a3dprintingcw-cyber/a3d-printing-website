@@ -437,6 +437,59 @@
       });
   }
 
+  /* ---------------- Floating "Get a quote" button ----------------
+     Always within a thumb's reach, like a chat bubble. It appears once you
+     have scrolled past the top of the page, and gets out of the way while the
+     quote form itself is on screen. */
+  function initQuoteFab() {
+    if (document.querySelector(".quote-fab")) return;
+    var onQuotePage = !!document.getElementById("quote");
+    var a = document.createElement("a");
+    a.className = "quote-fab";
+    a.href = onQuotePage ? "#quote" : "index.html#quote";
+    a.setAttribute("aria-label", "Get a quote");
+    a.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<path d="M4 4h16v12H8l-4 4V4Z"/><path d="M9 9h6M9 12h4"/></svg>' +
+      "<span>Get a quote</span>";
+    document.body.appendChild(a);
+
+    if (onQuotePage) {
+      a.addEventListener("click", function (e) {
+        e.preventDefault();
+        var section = document.getElementById("quote");
+        section.scrollIntoView({ behavior: "smooth", block: "start" });
+        // Put the cursor in the first field of whichever side is showing.
+        var mode = body.getAttribute("data-mode") === "dev" ? "d" : "p";
+        var first = document.getElementById(mode + "-name");
+        if (first) setTimeout(function () { try { first.focus({ preventScroll: true }); } catch (err) {} }, 600);
+      });
+    }
+
+    var pastTop = false;
+    var formInView = false;
+    function apply() { a.classList.toggle("is-on", pastTop && !formInView); }
+    function onScroll() {
+      // On a page too short to scroll (the Prices page, say) there is nothing
+      // to scroll past, so show it straight away.
+      var room = document.documentElement.scrollHeight - window.innerHeight;
+      var next = window.scrollY > 420 || room < 420;
+      if (next !== pastTop) { pastTop = next; apply(); }
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    onScroll();
+    setTimeout(onScroll, 1200);
+
+    var section = document.getElementById("quote");
+    if (section && "IntersectionObserver" in window) {
+      new IntersectionObserver(function (entries) {
+        formInView = entries[0].isIntersecting;
+        apply();
+      }, { threshold: 0.12 }).observe(section);
+    }
+  }
+
   /* ---------------- Init ---------------- */
   document.addEventListener("DOMContentLoaded", function () {
     initTheme();
@@ -448,6 +501,7 @@
     initForm("quote-form-dev");
     initQuickQuoteSync();
     initLivePrices();
+    initQuoteFab();
     initReveal();
     syncThemeColor();
 
