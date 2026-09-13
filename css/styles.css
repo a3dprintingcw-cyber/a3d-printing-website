@@ -305,6 +305,28 @@ td:first-child { color: var(--ink); font-weight: 600; }
 .setup-banner svg { width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; color: #b8770b; }
 .setup-banner code { background: rgba(0,0,0,.08); padding: 1px 5px; border-radius: 4px; }
 
+/* ---------- floating Get a quote button ---------- */
+.quote-fab {
+  position: fixed; right: 18px; bottom: 18px; z-index: 80;
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 14px 20px; border-radius: 999px;
+  background: var(--blue); color: #fff; font-weight: 700; font-size: 15px;
+  box-shadow: 0 10px 26px rgba(0,0,0,.28);
+  text-decoration: none; border: 1px solid color-mix(in srgb, #fff 22%, transparent);
+  opacity: 0; visibility: hidden; transform: translateY(14px) scale(.96);
+  transition: opacity .25s ease, transform .25s ease, visibility .25s, background .2s ease;
+}
+.quote-fab.is-on { opacity: 1; visibility: visible; transform: none; }
+.quote-fab:hover { background: var(--blue-dark, var(--blue)); }
+.quote-fab:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.quote-fab svg { width: 20px; height: 20px; flex-shrink: 0; }
+@media (max-width: 560px) {
+  .quote-fab { right: 14px; bottom: 14px; padding: 13px 18px; font-size: 14.5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .quote-fab { transition: opacity .01s; transform: none; }
+}
+
 .form-status { margin-top: 14px; font-size: 14px; font-weight: 600; display: none; }
 .form-status.ok { color: #17a34a; display: block; }
 .form-status.err {
