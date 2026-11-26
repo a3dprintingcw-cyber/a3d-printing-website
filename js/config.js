@@ -32,7 +32,7 @@ window.A3D_CONFIG = {
   // whole section stays hidden. Use a Google Calendar appointment schedule
   // (Calendar → Create → Appointment schedule) set to require your
   // confirmation, or a Cal.com / Calendly link. Paste the booking URL here.
-  bookingUrl: "https://calendar.google.com/calendar/appointments/schedules/AcZssZ3ID6LkVo12Y4j4N6zemnbxYWM3ywSgozd4WU9zYmAh8Lis0YYo9CcgbwvG3grtKi0CIhxieJH6?gv=true",
+  bookingUrl: "",
 
   // Instagram profile. Paste the full URL here and the Instagram buttons
   // (header, mobile menu, closing banner, contact and footer) turn on.

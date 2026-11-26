@@ -9,27 +9,25 @@
 <link rel="icon" type="image/png" sizes="192x192" href="assets/img/favicon-192.png">
 <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
 <meta name="theme-color" content="#1e5fd6">
-<link rel="stylesheet" href="css/styles.css?v=20261126b">
+<link rel="stylesheet" href="css/styles.css?v=20261126c">
 </head>
 <body data-mode="print">
 
 <header class="site-header">
   <div class="container">
-    <a href="#top" class="brand">
+    <a href="#home" class="brand">
       <img src="assets/img/logo-light.png" alt="A3D Printing" data-logo-mode="light">
       <img src="assets/img/logo-dark.png" alt="A3D Printing" data-logo-mode="dark" style="display:none">
     </a>
 
     <nav class="main-nav" aria-label="Primary">
+      <a href="#home">Home</a>
+      <a href="#work" data-content-for="print">Work</a>
       <a href="#services">Services</a>
-      <a href="#scanning" data-content-for="print">Scanning</a>
       <a href="#printer-service" data-content-for="print">Repairs</a>
-      <a href="#how-it-works">Process</a>
       <a href="prices.html" data-content-for="print">Prices</a>
       <a href="#quote" data-content-for="print">Quote</a>
       <a href="#quote" data-content-for="dev">Start a project</a>
-      <a href="#book" class="js-booking-nav" style="display:none">Book</a>
-      <a href="#about">About</a>
       <a href="#contact">Contact</a>
     </nav>
 
@@ -59,14 +57,12 @@
 </header>
 
 <nav class="mobile-nav" aria-label="Mobile">
+  <a href="#home">Home</a>
+  <a href="#work" data-content-for="print">Work</a>
   <a href="#services">Services</a>
-  <a href="#scanning">Scanning</a>
-  <a href="#printer-service">Printer repair</a>
-  <a href="#how-it-works">How it works</a>
-  <a href="prices.html">Prices</a>
+  <a href="#printer-service" data-content-for="print">Printer repair</a>
+  <a href="prices.html" data-content-for="print">Prices</a>
   <a href="#quote">Get a quote</a>
-  <a href="#book" class="js-booking-nav" style="display:none">Book</a>
-  <a href="#about">About</a>
   <a href="#contact">Contact</a>
   <a class="ig-link" data-cfg-instagram href="#" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.4" cy="6.6" r="1.1" fill="currentColor" stroke="none"/></svg> Instagram</a>
 </nav>
@@ -74,7 +70,7 @@
 <main id="top">
 
   <!-- ================= HERO ================= -->
-  <section class="hero">
+  <section data-page="home" class="hero">
     <div class="container">
       <div class="hero-copy">
         <span class="eyebrow" data-content-for="print">● Based in Curaçao</span>
@@ -91,17 +87,6 @@
           <a href="prices.html" class="btn btn-outline" data-content-for="print">See prices</a>
           <a href="#quote" class="btn btn-primary" data-content-for="dev">Start a project</a>
           <a href="#services" class="btn btn-outline" data-content-for="dev">What we build</a>
-        </div>
-
-        <div class="hero-stats" data-content-for="print" data-display="flex">
-          <div class="hero-stat"><b>Walk-in</b><span>or order online</span></div>
-          <div class="hero-stat"><b>PLA · PETG · TPU · ASA · Resin</b><span>materials on hand</span></div>
-          <div class="hero-stat"><b>5 languages</b><span>spoken in the shop</span></div>
-        </div>
-        <div class="hero-stats" data-content-for="dev" data-display="flex">
-          <div class="hero-stat"><b>Websites</b><span>marketing &amp; e-commerce</span></div>
-          <div class="hero-stat"><b>Web apps</b><span>internal tools, dashboards</span></div>
-          <div class="hero-stat"><b>Mobile</b><span>iOS &amp; Android</span></div>
         </div>
       </div>
 
@@ -140,7 +125,7 @@
        the scroll loop seamlessly. A client without a logo yet can stay a
        plain <span> with the name. The strip scrolls by itself and pauses
        when the pointer is over it. -->
-  <section class="client-band" aria-label="Companies we have worked with">
+  <section data-page="home" class="client-band" aria-label="Companies we have worked with">
     <p class="client-band-title">Companies we've worked with</p>
     <div class="client-marquee">
       <div class="client-track">
@@ -174,8 +159,54 @@
     </div>
   </section>
 
+  <!-- ================= HOME: RECENT WORK ================= -->
+  <section class="section" data-page="home" data-content-for="print">
+    <div class="container">
+      <div class="section-head center"><span class="eyebrow">Recent work</span><h2>Made here in Curaçao</h2></div>
+      <div class="work-grid work-grid-teaser">
+      <figure class="work-tile"><video muted loop playsinline preload="none" poster="assets/work/krokzz-led.jpg" data-src="assets/work/krokzz-led.mp4"></video><figcaption>LED sign for DJ Krokzz</figcaption></figure>
+      <figure class="work-tile"><video muted loop playsinline preload="none" poster="assets/work/valentino-sign.jpg" data-src="assets/work/valentino-sign.mp4"></video><figcaption>Valentino wall sign</figcaption></figure>
+      <figure class="work-tile"><img src="assets/work/padel-trophies.jpg" alt="Padel X trophies" loading="lazy"><figcaption>Padel X trophies</figcaption></figure>
+      <figure class="work-tile"><video muted loop playsinline preload="none" poster="assets/work/mi-mojito.jpg" data-src="assets/work/mi-mojito.mp4"></video><figcaption>Mi Mojito coasters</figcaption></figure>
+      <figure class="work-tile"><video muted loop playsinline preload="none" poster="assets/work/scale-car.jpg" data-src="assets/work/scale-car.mp4"></video><figcaption>Scale model car</figcaption></figure>
+      <figure class="work-tile"><img src="assets/work/phone-stands.jpg" alt="Folding phone stands" loading="lazy"><figcaption>Folding phone stands</figcaption></figure>
+      </div>
+      <div class="hero-actions" style="justify-content:center;margin-top:28px"><a href="#work" class="btn btn-primary">See all our work</a></div>
+    </div>
+  </section>
+
+  <!-- ================= WORK ================= -->
+  <section class="section" id="work" data-page="work" data-content-for="print">
+    <div class="container">
+      <div class="section-head center"><span class="eyebrow">Our work</span><h2>Real prints, real clients</h2></div>
+      <div class="work-grid">
+      <figure class="work-tile"><video muted loop playsinline preload="none" poster="assets/work/krokzz-led.jpg" data-src="assets/work/krokzz-led.mp4"></video><figcaption>LED sign for DJ Krokzz</figcaption></figure>
+      <figure class="work-tile"><img src="assets/work/padel-trophies.jpg" alt="Padel X trophies" loading="lazy"><figcaption>Padel X trophies</figcaption></figure>
+      <figure class="work-tile"><video muted loop playsinline preload="none" poster="assets/work/valentino-sign.jpg" data-src="assets/work/valentino-sign.mp4"></video><figcaption>Valentino wall sign</figcaption></figure>
+      <figure class="work-tile"><img src="assets/work/corendon-tags.jpg" alt="Corendon luggage tags" loading="lazy"><figcaption>Corendon luggage tags</figcaption></figure>
+      <figure class="work-tile"><video muted loop playsinline preload="none" poster="assets/work/mi-mojito.jpg" data-src="assets/work/mi-mojito.mp4"></video><figcaption>Mi Mojito coasters</figcaption></figure>
+      <figure class="work-tile"><video muted loop playsinline preload="none" poster="assets/work/scale-car.jpg" data-src="assets/work/scale-car.mp4"></video><figcaption>Scale model car</figcaption></figure>
+      <figure class="work-tile"><img src="assets/work/phone-stands.jpg" alt="Folding phone stands" loading="lazy"><figcaption>Folding phone stands</figcaption></figure>
+      <figure class="work-tile"><video muted loop playsinline preload="none" poster="assets/work/select-coasters.jpg" data-src="assets/work/select-coasters.mp4"></video><figcaption>Select Automotive coasters</figcaption></figure>
+      <figure class="work-tile"><img src="assets/work/name-coasters.jpg" alt="Personalised coasters" loading="lazy"><figcaption>Personalised coasters</figcaption></figure>
+      <figure class="work-tile"><video muted loop playsinline preload="none" poster="assets/work/trophy-beach.jpg" data-src="assets/work/trophy-beach.mp4"></video><figcaption>Custom trophy</figcaption></figure>
+      <figure class="work-tile"><video muted loop playsinline preload="none" poster="assets/work/wheel-caps.jpg" data-src="assets/work/wheel-caps.mp4"></video><figcaption>Wheel center caps</figcaption></figure>
+      <figure class="work-tile"><video muted loop playsinline preload="none" poster="assets/work/headset-stand.jpg" data-src="assets/work/headset-stand.mp4"></video><figcaption>Headset stand</figcaption></figure>
+      <figure class="work-tile"><video muted loop playsinline preload="none" poster="assets/work/aplus-batch.jpg" data-src="assets/work/aplus-batch.mp4"></video><figcaption>A+ batch</figcaption></figure>
+      <figure class="work-tile"><video muted loop playsinline preload="none" poster="assets/work/coffee-coasters.jpg" data-src="assets/work/coffee-coasters.mp4"></video><figcaption>Branded coasters</figcaption></figure>
+      <figure class="work-tile"><img src="assets/work/phone-stands-back.jpg" alt="Logo phone stands" loading="lazy"><figcaption>Logo phone stands</figcaption></figure>
+      <figure class="work-tile"><video muted loop playsinline preload="none" poster="assets/work/jersey-keychain.jpg" data-src="assets/work/jersey-keychain.mp4"></video><figcaption>Jersey keychains</figcaption></figure>
+      <figure class="work-tile"><video muted loop playsinline preload="none" poster="assets/work/padel-pieces.jpg" data-src="assets/work/padel-pieces.mp4"></video><figcaption>Fresh off the printer</figcaption></figure>
+      <figure class="work-tile"><video muted loop playsinline preload="none" poster="assets/work/batch-run.jpg" data-src="assets/work/batch-run.mp4"></video><figcaption>Bulk order</figcaption></figure>
+      <figure class="work-tile"><video muted loop playsinline preload="none" poster="assets/work/green-parts.jpg" data-src="assets/work/green-parts.mp4"></video><figcaption>Batch run</figcaption></figure>
+      <figure class="work-tile"><video muted loop playsinline preload="none" poster="assets/work/valentino-close.jpg" data-src="assets/work/valentino-close.mp4"></video><figcaption>Valentino sign close up</figcaption></figure>
+      </div>
+      <div class="hero-actions" style="justify-content:center;margin-top:28px"><a href="#quote" class="btn btn-primary">Get yours made</a><a class="btn btn-outline" data-cfg-instagram href="#" target="_blank" rel="noopener">More on Instagram</a></div>
+    </div>
+  </section>
+
   <!-- ================= SERVICES ================= -->
-  <section class="section" id="services">
+  <section data-page="services" class="section" id="services">
     <div class="container">
       <div class="section-head center">
         <span class="eyebrow">Services</span>
@@ -269,7 +300,7 @@
   </section>
 
   <!-- ================= 3D SCANNING ================= -->
-  <section class="section" id="scanning" data-content-for="print">
+  <section data-page="services" class="section" id="scanning" data-content-for="print">
     <div class="container">
       <div class="section-head center">
         <span class="eyebrow">3D scanning</span>
@@ -298,7 +329,7 @@
   </section>
 
   <!-- ================= PRINTER SERVICE ================= -->
-  <section class="section section-alt" id="printer-service" data-content-for="print">
+  <section data-page="repairs" class="section section-alt" id="printer-service" data-content-for="print">
     <div class="container">
       <div class="section-head center">
         <span class="eyebrow">Printer service &amp; repair</span>
@@ -330,33 +361,9 @@
     </div>
   </section>
 
-  <!-- ================= HOW IT WORKS ================= -->
-  <section class="section section-alt" id="how-it-works">
-    <div class="container">
-      <div class="section-head center">
-        <span class="eyebrow">Process</span>
-        <h2 data-content-for="print">From file to finished print</h2>
-        <h2 data-content-for="dev">From idea to launch</h2>
-      </div>
-
-      <div class="steps" data-content-for="print">
-        <div class="step"><div class="num">1</div><h3>Upload</h3><p>File or photo.</p></div>
-        <div class="step"><div class="num">2</div><h3>Get a quote</h3><p>Usually same day.</p></div>
-        <div class="step"><div class="num">3</div><h3>Approve &amp; print</h3><p>We start right away.</p></div>
-        <div class="step"><div class="num">4</div><h3>Pickup or delivery</h3><p>Your call.</p></div>
-      </div>
-
-      <div class="steps" data-content-for="dev">
-        <div class="step"><div class="num">1</div><h3>Tell us about it</h3><p>What, for who, by when.</p></div>
-        <div class="step"><div class="num">2</div><h3>Scope &amp; quote</h3><p>Clear price, no surprises.</p></div>
-        <div class="step"><div class="num">3</div><h3>Build</h3><p>With your feedback.</p></div>
-        <div class="step"><div class="num">4</div><h3>Launch &amp; support</h3><p>We stick around.</p></div>
-      </div>
-    </div>
-  </section>
 
   <!-- ================= MATERIALS (print) / STACK (dev) ================= -->
-  <section class="section" id="materials">
+  <section data-page="services" class="section" id="materials">
     <div class="container" data-content-for="print">
       <div class="section-head center">
         <span class="eyebrow">Materials</span>
@@ -394,7 +401,7 @@
   </section>
 
   <!-- ================= QUOTE / PROJECT FORM ================= -->
-  <section class="section" id="quote">
+  <section data-page="quote" class="section" id="quote">
     <div class="container">
       <div class="section-head center">
         <span class="eyebrow" data-content-for="print">Get a quote</span>
@@ -593,30 +600,33 @@
     </div>
   </section>
 
-  <!-- ================= ABOUT ================= -->
-  <section class="section" id="about">
-    <div class="container about-grid">
-      <div>
-        <span class="eyebrow">About A3D Printing</span>
-        <h2>Made in Curaçao</h2>
-        <p>Walk-ins and businesses. One piece or a full run.</p>
-        <ul class="about-list">
-          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Serving walk-in customers and business clients</li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Quotes in XCG (Antillean guilder)</li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> We speak five languages</li>
-        </ul>
+  <!-- ================= HOW IT WORKS ================= -->
+  <section data-page="quote" class="section section-alt" id="how-it-works">
+    <div class="container">
+      <div class="section-head center">
+        <span class="eyebrow">Process</span>
+        <h2 data-content-for="print">From file to finished print</h2>
+        <h2 data-content-for="dev">From idea to launch</h2>
       </div>
-      <div class="about-visual">
-        <div class="mini-stat"><b>Same day</b><span>most quotes</span></div>
-        <div class="mini-stat"><b>5</b><span>languages spoken</span></div>
-        <div class="mini-stat"><b>XCG</b><span>local pricing</span></div>
-        <div class="mini-stat"><b>🇨🇼</b><span>Curaçao-based</span></div>
+
+      <div class="steps" data-content-for="print">
+        <div class="step"><div class="num">1</div><h3>Upload</h3><p>File or photo.</p></div>
+        <div class="step"><div class="num">2</div><h3>Get a quote</h3><p>Usually same day.</p></div>
+        <div class="step"><div class="num">3</div><h3>Approve &amp; print</h3><p>We start right away.</p></div>
+        <div class="step"><div class="num">4</div><h3>Pickup or delivery</h3><p>Your call.</p></div>
+      </div>
+
+      <div class="steps" data-content-for="dev">
+        <div class="step"><div class="num">1</div><h3>Tell us about it</h3><p>What, for who, by when.</p></div>
+        <div class="step"><div class="num">2</div><h3>Scope &amp; quote</h3><p>Clear price, no surprises.</p></div>
+        <div class="step"><div class="num">3</div><h3>Build</h3><p>With your feedback.</p></div>
+        <div class="step"><div class="num">4</div><h3>Launch &amp; support</h3><p>We stick around.</p></div>
       </div>
     </div>
   </section>
 
   <!-- ================= CTA ================= -->
-  <section class="section">
+  <section class="section" data-page="home">
     <div class="container">
       <div class="cta-banner">
         <h2 data-content-for="print">Got a file? Let's print it.</h2>
@@ -639,31 +649,7 @@
     </div>
   </section>
 
-  <!-- ================= CONTACT ================= -->
-  <!-- ================= BOOK A MEETING =================
-       Hidden until a bookingUrl is set in js/config.js. Point it at a
-       Google Calendar appointment schedule (or Cal.com / Calendly) that
-       is configured to require your confirmation, so nothing lands in
-       your calendar until you accept it. -->
-  <section class="section" id="book" style="display:none">
-    <div class="container">
-      <div class="section-head center">
-        <span class="eyebrow">Book a meeting</span>
-        <h2 data-content-for="print">Rather talk it through?</h2>
-        <h2 data-content-for="dev">Book a project chat</h2>
-        <p>Pick a time, we'll call you.</p>
-      </div>
-      <div class="booking-embed">
-        <iframe class="js-booking-frame" title="Book a meeting" loading="lazy" frameborder="0"></iframe>
-      </div>
-      <p class="booking-fallback">
-        Trouble with the calendar above?
-        <a class="js-booking-link" href="#" target="_blank" rel="noopener">Open the booking page in a new tab</a>.
-      </p>
-    </div>
-  </section>
-
-  <section class="section section-alt" id="contact">
+  <section data-page="contact" class="section section-alt" id="contact">
     <div class="container">
       <div class="section-head center">
         <span class="eyebrow">Contact</span>
@@ -690,6 +676,27 @@
           <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
           <div><h3>Hours</h3><p data-cfg-hours>Mon–Fri 9:00–17:00 AST</p></div>
         </div>
+      </div>
+    </div>
+  </section>
+  <!-- ================= ABOUT ================= -->
+  <section data-page="contact" class="section" id="about">
+    <div class="container about-grid">
+      <div>
+        <span class="eyebrow">About A3D Printing</span>
+        <h2>Made in Curaçao</h2>
+        <p>Walk-ins and businesses. One piece or a full run.</p>
+        <ul class="about-list">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Serving walk-in customers and business clients</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Quotes in XCG (Antillean guilder)</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> We speak five languages</li>
+        </ul>
+      </div>
+      <div class="about-visual">
+        <div class="mini-stat"><b>Same day</b><span>most quotes</span></div>
+        <div class="mini-stat"><b>5</b><span>languages spoken</span></div>
+        <div class="mini-stat"><b>XCG</b><span>local pricing</span></div>
+        <div class="mini-stat"><b>🇨🇼</b><span>Curaçao-based</span></div>
       </div>
     </div>
   </section>
@@ -723,7 +730,8 @@
   </div>
 </footer>
 
-<script src="js/config.js?v=20260913b"></script>
-<script src="js/main.js?v=20260913b"></script>
+<script src="js/config.js?v=20261126c"></script>
+<script src="js/main.js?v=20261126c"></script>
+<script src="js/pages.js?v=20261126c"></script>
 </body>
 </html>
