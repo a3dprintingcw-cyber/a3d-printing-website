@@ -1,4 +1,6 @@
 import { identify } from './access.js';
+import { LOGIN_HTML, LoginError, login, pinSession, pinConfigured, setPin, issueSession, sessionCookie, ensureTables } from './auth.js';
+import { SERVICE_WORKER, MANIFEST, vapidKeys, addDevice, removeDevice, deviceCount, notifyDevices, collectMessage } from './webpush.js';
 import { alertAdmin, newOrderAlert } from './email.js';
 import { push, newOrderPush, ntfyTopic, createTopic, clearTopic } from './notify.js';
 import { createPayment, fetchStatus, isMock } from './sentoo.js';
@@ -17,6 +19,13 @@ const json = (data, status = 200, extra = {}) =>
   });
 
 const bad = (msg, status = 400) => json({ error: msg }, status);
+
+// Who is asking: a Cloudflare Access login while that still exists, or a PIN session.
+async function whoIs(request, env) {
+  const viaAccess = await identify(request, env).catch(() => null);
+  if (viaAccess) return viaAccess;
+  return (await pinSession(request, env).catch(() => false)) ? env.ADMIN_EMAIL : null;
+}
 
 function corsHeaders(env, request) {
   const origin = request.headers.get('Origin') || '';
@@ -207,6 +216,10 @@ async function handleQuoteRequest(request, env, ctx) {
 
   ctx.waitUntil(alertAdmin(env, `New request ${ref} from ${customer.name}`, newOrderAlert(order, customer, files)));
   ctx.waitUntil(push(env, newOrderPush(order, customer, files)));
+  {
+    const m = newOrderPush(order, customer, files);
+    ctx.waitUntil(notifyDevices(env, { title: m.title, body: m.message, url: `/admin#/order/${order.id}` }).catch((e) => console.log('push failed', e.message)));
+  }
 
   return json({ ok: true, ref });
 }
@@ -380,6 +393,8 @@ export async function adminRoutes(request, env, url, email) {
       email,
       sentoo: isMock(env) ? 'mock' : 'live',
       ntfy: { topic: await ntfyTopic(env) },
+      pin: { configured: await pinConfigured(env), viaPin: await pinSession(request, env) },
+      push: { devices: await deviceCount(env), key: (await vapidKeys(env)).publicKey },
       gmail: { connected: Boolean(g.clientId && g.clientSecret && g.refreshToken), hasApp: Boolean(g.clientId && g.clientSecret), account: g.account },
       qbo: {
         connected: Boolean(qc.clientId && qc.clientSecret && qc.refreshToken && qc.realmId),
@@ -389,6 +404,38 @@ export async function adminRoutes(request, env, url, email) {
         needsReconnect: qc.needsReconnect,
       },
     });
+  }
+
+  // --- sign-in PIN ---------------------------------------------------------
+  if (p === '/pin' && method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    try {
+      await setPin(env, String(body.pin || ''));
+    } catch (e) {
+      return bad(e.message);
+    }
+    // Changing the PIN signs every device out, except the one that changed it.
+    return json({ ok: true }, 200, { 'set-cookie': await issueSession(env) });
+  }
+
+  // --- our own phone notifications (Web Push) ---------------------------
+  if (p === '/push/subscribe' && method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    try {
+      await addDevice(env, body.endpoint, body.label);
+    } catch (e) {
+      return bad(e.message);
+    }
+    return json({ ok: true, devices: await deviceCount(env) });
+  }
+  if (p === '/push/unsubscribe' && method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    await removeDevice(env, body.endpoint);
+    return json({ ok: true, devices: await deviceCount(env) });
+  }
+  if (p === '/push/test' && method === 'POST') {
+    const n = await notifyDevices(env, { title: 'A3D back office', body: 'Notifications are working. New orders will show up here.', url: '/admin' });
+    return n ? json({ ok: true, sent: n }) : bad('No device got it. Turn notifications on for this device first.', 502);
   }
 
   // --- phone notifications through ntfy -------------------------------
@@ -1102,14 +1149,47 @@ export default {
         return json({ ok: true, mode: isMock(env) ? 'sentoo mock' : 'sentoo live' });
       }
 
+      // Sign-in, and the files a Home Screen app needs
+      if (path === '/sw.js') {
+        return new Response(SERVICE_WORKER, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-cache', 'service-worker-allowed': '/' } });
+      }
+      if (path === '/manifest.webmanifest') {
+        return new Response(MANIFEST, { headers: { 'content-type': 'application/manifest+json' } });
+      }
+      if (path === '/api/push/key' && request.method === 'GET') {
+        return json({ key: (await vapidKeys(env)).publicKey });
+      }
+      if (path === '/api/push/message' && request.method === 'POST') {
+        const body = await request.json().catch(() => ({}));
+        return json((await collectMessage(env, body.endpoint)) || {});
+      }
+      if (path === '/api/auth/session' && request.method === 'GET') {
+        await ensureTables(env);
+        return json({ configured: await pinConfigured(env), signedIn: Boolean(await whoIs(request, env)) });
+      }
+      if (path === '/api/auth/login' && request.method === 'POST') {
+        const body = await request.json().catch(() => ({}));
+        try {
+          const cookie = await login(request, env, String(body.pin || ''));
+          return json({ ok: true }, 200, { 'set-cookie': cookie });
+        } catch (e) {
+          if (e instanceof LoginError) return bad(e.message, e.status);
+          throw e;
+        }
+      }
+      if (path === '/api/auth/logout' && request.method === 'POST') {
+        return json({ ok: true }, 200, { 'set-cookie': sessionCookie('', 0) });
+      }
+
       // Admin
       if (path === '/admin' || path === '/admin/' || path.startsWith('/admin/')) {
-        const who = await identify(request, env);
-        if (!who) return new Response('Not authorised.', { status: 403 });
-        return new Response(ADMIN_HTML, { headers: { 'content-type': 'text/html; charset=utf-8' } });
+        const who = await whoIs(request, env);
+        const headers = { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' };
+        if (!who) return new Response(LOGIN_HTML, { headers });
+        return new Response(ADMIN_HTML, { headers });
       }
       if (path.startsWith('/api/admin/')) {
-        const who = await identify(request, env);
+        const who = await whoIs(request, env);
         if (!who) return json({ error: 'Not authorised' }, 403);
         return adminRoutes(request, env, url, who);
       }

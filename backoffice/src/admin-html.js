@@ -11,6 +11,11 @@ export const ADMIN_HTML = String.raw`<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>A3D back office</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="https://a3dprinting.com/assets/img/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="A3D Office">
+<meta name="theme-color" content="#0d0f13">
 <link rel="icon" type="image/png" href="/assets/img/favicon-32.png">
 <style>
   :root {
@@ -969,8 +974,25 @@ function settings() {
     var redirect = location.origin + '/api/admin/gmail/callback';
     var html = '<h1>Settings</h1><p class="sub">Connections the back office uses to do its job.</p>' + flash;
 
+    var pin = me.pin || {};
+    html += '<div class="card"><h2>Sign-in PIN</h2>';
+    html += pin.configured
+      ? '<p>Set. Each phone or computer stays signed in for 30 days. Changing the PIN signs every other device out.</p>'
+      : '<p style="color:var(--warn)"><b>No PIN yet.</b> Set one now, then the Cloudflare login can be removed.</p>';
+    html += '<div class="form"><label>' + (pin.configured ? 'New PIN' : 'PIN') + ' (6 to 12 digits)<input id="pin1" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="12" autocomplete="new-password"></label>' +
+      '<label>Type it again<input id="pin2" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="12" autocomplete="new-password"></label></div>' +
+      '<p><button class="primary" onclick="savePin()">' + (pin.configured ? 'Change PIN' : 'Set PIN') + '</button> ' +
+      (pin.viaPin ? '<button class="ghost" onclick="signOut()">Sign out of this device</button>' : '') + '</p>';
+    html += '</div>';
+
+    var pu = me.push || {};
+    html += '<div class="card"><h2>Notifications</h2>' +
+      '<p>' + (pu.devices ? pu.devices + ' device' + (pu.devices === 1 ? '' : 's') + ' get a notification for every new order.' : 'No device gets notifications yet.') + '</p>' +
+      '<div id="pushbox"><p class="muted">Checking this device...</p></div></div>';
+    setTimeout(function () { pushBox(pu.key); }, 0);
+
     var nt = (me.ntfy || {}).topic;
-    html += '<div class="card"><h2>Phone notifications</h2>';
+    html += '<div class="card"><h2>ntfy notifications (old)</h2>';
     if (nt) {
       html += '<p>On. Every new order pings your phone straight away.</p>' +
         '<ol class="steps">' +
@@ -1128,6 +1150,63 @@ function gmailTest() {
   api('/gmail/test', { method: 'POST' })
     .then(function (r) { alert('Sent to ' + r.sentTo + '. Check your inbox.'); })
     .catch(function (e) { alert(e.message); });
+}
+
+function savePin() {
+  var a = document.getElementById('pin1').value, b = document.getElementById('pin2').value;
+  if (a !== b) { alert('The two PINs are not the same.'); return; }
+  api('/pin', { method: 'POST', body: JSON.stringify({ pin: a }) })
+    .then(function () { alert('PIN saved. Use it to sign in from now on.'); settings(); })
+    .catch(function (e) { alert(e.message); });
+}
+function signOut() {
+  fetch('/api/auth/logout', { method: 'POST' }).then(function () { location.href = '/admin'; });
+}
+
+// ---- our own notifications (Web Push) ----
+function isIos() { return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
+function isHomeScreenApp() { return window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches; }
+function b64ToBytes(s) {
+  var pad = '='.repeat((4 - s.length % 4) % 4), raw = atob((s + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  var out = new Uint8Array(raw.length); for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i); return out;
+}
+function pushBox(key) {
+  var box = document.getElementById('pushbox'); if (!box) return;
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+    box.innerHTML = isIos() && !isHomeScreenApp()
+      ? '<p><b>On iPhone, notifications only work from the Home Screen app.</b></p><ol class="steps"><li>Tap the Share button in Safari.</li><li>Tap <b>Add to Home Screen</b>, then <b>Add</b>.</li><li>Open <b>A3D Office</b> from your Home Screen, sign in with your PIN, and come back to Settings.</li></ol>'
+      : '<p class="muted">This browser cannot show notifications.</p>';
+    return;
+  }
+  navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(function (reg) {
+    return reg.pushManager.getSubscription();
+  }).then(function (sub) {
+    box.innerHTML = sub && Notification.permission === 'granted'
+      ? '<p>On for this device.</p><p><button class="primary" onclick="pushTest()">Send a test notification</button> <button class="ghost" onclick="pushOff()">Turn off on this device</button></p>'
+      : '<p><button class="primary" onclick="pushOn(\'' + key + '\')">Turn on notifications for this device</button></p>' +
+        (Notification.permission === 'denied' ? '<p class="muted">Notifications are blocked for this app. Allow them in your phone settings first.</p>' : '');
+  }).catch(function (e) { box.innerHTML = '<p class="muted">' + esc(e.message) + '</p>'; });
+}
+function pushOn(key) {
+  Notification.requestPermission().then(function (perm) {
+    if (perm !== 'granted') throw new Error('Notifications were not allowed.');
+    return navigator.serviceWorker.ready;
+  }).then(function (reg) {
+    return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(key) });
+  }).then(function (sub) {
+    var label = (isIos() ? 'iPhone' : /android/i.test(navigator.userAgent) ? 'Android' : 'Computer') + ', ' + new Date().toLocaleDateString();
+    return api('/push/subscribe', { method: 'POST', body: JSON.stringify({ endpoint: sub.endpoint, label: label }) });
+  }).then(function () { settings(); }).catch(function (e) { alert(e.message); });
+}
+function pushOff() {
+  navigator.serviceWorker.ready.then(function (reg) { return reg.pushManager.getSubscription(); }).then(function (sub) {
+    if (!sub) return;
+    var ep = sub.endpoint;
+    return sub.unsubscribe().then(function () { return api('/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint: ep }) }); });
+  }).then(function () { settings(); }).catch(function (e) { alert(e.message); });
+}
+function pushTest() {
+  api('/push/test', { method: 'POST' }).then(function () { alert('Sent. Your phone should buzz in a moment.'); }).catch(function (e) { alert(e.message); });
 }
 
 function ntfySetup() {

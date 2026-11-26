@@ -16,6 +16,7 @@ const bindings = {
   PUBLIC_ORIGIN: 'https://a3dprinting.com', MAX_UPLOAD_MB: '50',
   CF_ACCESS_TEAM: 'x', CF_ACCESS_AUD: 'y',
   SENTOO_BASE: 'https://api.sandbox.sentoo.io', SENTOO_MODE: 'mock',
+  PUSH_TEST_HOST: 'push.test',
 };
 
 const mf = new Miniflare({
@@ -651,7 +652,129 @@ await t('the new order push names the order and links straight to it', async () 
 });
 
 await t('the settings screen has the phone notifications box', async () => {
-  assert(ADMIN_HTML.includes('Phone notifications') && ADMIN_HTML.includes('ntfySetup()') && ADMIN_HTML.includes('ntfyTest()'), 'box or buttons missing');
+  assert(ADMIN_HTML.includes('ntfySetup()') && ADMIN_HTML.includes('ntfyTest()'), 'box or buttons missing');
+});
+
+// ---------- PIN sign-in ----------
+const P = (path, opts = {}) => pub.dispatchFetch('https://app.a3dprinting.com' + path, opts);
+const login = (pin, ip = '10.0.0.1') => P('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json', 'CF-Connecting-IP': ip }, body: JSON.stringify({ pin }) });
+let pinCookie = '';
+
+await t('without a sign-in, /admin shows the PIN page and not the back office', async () => {
+  const r = await P('/admin');
+  const html = await r.text();
+  assert(r.status === 200 && html.includes('inputmode="numeric"') && html.includes('Sign in'), 'no PIN page');
+  assert(!html.includes('#/orders'), 'the back office leaked out');
+  const api = await P('/api/admin/orders');
+  // the harness skips auth for /api/admin, so check the real gate through /admin only
+  assert(api.status !== 500, 'admin api broke');
+});
+
+await t('before a PIN exists, sign-in says so and refuses', async () => {
+  const s = await (await P('/api/auth/session')).json();
+  assert(s.configured === false && s.signedIn === false, JSON.stringify(s));
+  const r = await login('583920');
+  assert(r.status === 409, 'http ' + r.status);
+});
+
+await t('weak or malformed PINs are refused', async () => {
+  for (const pin of ['123456', '111111', '12345', 'abcdef', '9876543']) {
+    const r = await A('/pin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin }) });
+    assert(r.status === 400, pin + ' was accepted');
+  }
+});
+
+await t('setting a PIN keeps only a hash and signs this device in', async () => {
+  const r = await A('/pin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: '583920' }) });
+  assert(r.status === 200, 'http ' + r.status);
+  assert(/a3d_session=\d+\./.test(r.headers.get('set-cookie') || ''), 'no session cookie');
+  const row = await db.prepare("SELECT value FROM settings WHERE key = 'admin_pin'").first();
+  assert(row && !row.value.includes('583920') && JSON.parse(row.value).hash.length === 64, 'pin stored badly');
+});
+
+await t('the right PIN gives a 30 day HttpOnly cookie that opens the back office', async () => {
+  const r = await login('583920');
+  assert(r.status === 200, 'http ' + r.status);
+  const c = r.headers.get('set-cookie') || '';
+  assert(c.includes('HttpOnly') && c.includes('Secure') && c.includes('Max-Age=2592000'), c);
+  pinCookie = c.split(';')[0];
+  const page = await (await P('/admin', { headers: { Cookie: pinCookie } })).text();
+  assert(page.includes('#/orders'), 'cookie did not open the back office');
+  const tampered = pinCookie.replace(/.$/, (ch) => (ch === 'A' ? 'B' : 'A'));
+  const bad = await (await P('/admin', { headers: { Cookie: tampered } })).text();
+  assert(!bad.includes('#/orders'), 'a tampered cookie got in');
+});
+
+await t('five wrong PINs lock that network out, even for the right PIN', async () => {
+  for (let i = 0; i < 5; i++) {
+    const r = await login('000001', '10.9.9.9');
+    assert(r.status === 401, 'wrong pin ' + i + ' gave ' + r.status);
+  }
+  const locked = await login('583920', '10.9.9.9');
+  assert(locked.status === 429, 'not locked: ' + locked.status);
+  const other = await login('583920', '10.7.7.7');
+  assert(other.status === 200, 'another network was locked too');
+});
+
+await t('changing the PIN signs other devices out', async () => {
+  await A('/pin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: '730291' }) });
+  const page = await (await P('/admin', { headers: { Cookie: pinCookie } })).text();
+  assert(!page.includes('#/orders'), 'old session still works');
+  const r = await login('730291', '10.1.1.1');
+  assert(r.status === 200, 'new pin refused');
+});
+
+await t('signing out clears the cookie', async () => {
+  const r = await P('/api/auth/logout', { method: 'POST' });
+  assert((r.headers.get('set-cookie') || '').includes('Max-Age=0'), 'cookie not cleared');
+});
+
+// ---------- our own notifications ----------
+await t('the Home Screen app files are served publicly', async () => {
+  const sw = await P('/sw.js');
+  assert(sw.status === 200 && (await sw.text()).includes("addEventListener('push'"), 'no service worker');
+  const mfst = await (await P('/manifest.webmanifest')).json();
+  assert(mfst.start_url === '/admin' && mfst.display === 'standalone', 'bad manifest');
+  const key = await (await P('/api/push/key')).json();
+  assert(key.key && key.key.length > 80, 'no public key');
+  const again = await (await P('/api/push/key')).json();
+  assert(again.key === key.key, 'key changed between calls');
+});
+
+await t('a device can turn notifications on, gets its message, and only its own', async () => {
+  const bad = await A('/push/subscribe', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint: 'https://evil.example/x' }) });
+  assert(bad.status === 400, 'a strange endpoint was accepted');
+  const ep = 'https://push.test/device-1';
+  const ok = await A('/push/subscribe', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint: ep, label: 'iPhone' }) });
+  assert(ok.status === 200 && (await ok.json()).devices === 1, 'subscribe failed');
+  await A('/push/test', { method: 'POST' });
+  const stranger = await (await P('/api/push/message', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint: 'https://push.test/other' }) })).json();
+  assert(!stranger.title, 'a stranger got the message');
+  const m = await (await P('/api/push/message', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint: ep }) })).json();
+  assert(m.title === 'A3D back office', 'wrong message: ' + JSON.stringify(m));
+  const none = await (await P('/api/push/message', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint: ep }) })).json();
+  assert(!none.title, 'the same message came twice');
+});
+
+await t('a new order from the website leaves a notification for the device', async () => {
+  const r = await pub.dispatchFetch('https://app.a3dprinting.com/api/quote-request', {
+    method: 'POST', headers: { 'content-type': 'multipart/form-data; boundary=zz' },
+    body: '--zz\r\nContent-Disposition: form-data; name="name"\r\n\r\nPush Test\r\n--zz\r\nContent-Disposition: form-data; name="email"\r\n\r\np@example.com\r\n--zz\r\nContent-Disposition: form-data; name="material"\r\n\r\nPLA\r\n--zz--\r\n',
+  });
+  const { ref } = await r.json();
+  assert(ref && ref.startsWith('A3D-'), 'no order ref');
+  let m = {};
+  for (let i = 0; i < 20 && !m.title; i++) {
+    await new Promise((res) => setTimeout(res, 100));
+    m = await (await P('/api/push/message', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint: 'https://push.test/device-1' }) })).json();
+  }
+  assert(m.title === 'New order ' + ref && m.body.includes('Push Test') && /\/admin#\/order\/\d+$/.test(m.url), JSON.stringify(m));
+  await A('/push/unsubscribe', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint: 'https://push.test/device-1' }) });
+});
+
+await t('settings has the PIN and notifications boxes and the page can be added to the Home Screen', async () => {
+  assert(ADMIN_HTML.includes('Sign-in PIN') && ADMIN_HTML.includes('savePin()') && ADMIN_HTML.includes('pushBox('), 'boxes missing');
+  assert(ADMIN_HTML.includes('rel="manifest"') && ADMIN_HTML.includes('apple-touch-icon'), 'not installable');
 });
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

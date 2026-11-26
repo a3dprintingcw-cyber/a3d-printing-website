@@ -141,9 +141,10 @@ await t('own-site referrers are not counted as sources', async () => {
   assert(row.referrer === null, 'self referrer stored: ' + row.referrer);
 });
 
-await t('admin is refused without an Access identity', async () => {
+await t('admin without a sign-in shows only the PIN page, and the api refuses', async () => {
   const r = await mf.dispatchFetch('https://a3dprinting.com/admin');
-  assert(r.status === 403, 'status ' + r.status);
+  const html = await r.text();
+  assert(html.includes('inputmode="numeric"') && !html.includes('#/orders'), 'back office shown without sign-in');
   const r2 = await mf.dispatchFetch('https://a3dprinting.com/api/admin/orders');
   assert(r2.status === 403, 'api status ' + r2.status);
 });
