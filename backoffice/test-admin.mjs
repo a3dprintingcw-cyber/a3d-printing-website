@@ -9,6 +9,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 import vm from 'node:vm';
 import { ADMIN_HTML } from './src/admin-html.js';
 import { newOrderAlert } from './src/email.js';
+import { newOrderPush } from './src/notify.js';
 
 const bindings = {
   ADMIN_EMAIL: 'a3dprinting.cw@gmail.com', BUSINESS_NAME: 'A3D Printing', CURRENCY: 'XCG',
@@ -624,6 +625,33 @@ await t('the new request email links straight to the order', async () => {
     { name: 'Jose', email: 'j@example.com', company: 'SVB' }, []);
   assert(text.includes('https://app.a3dprinting.com/admin#/order/9'), 'wrong link in: ' + text);
   assert(!/https:\/\/a3dprinting\.com\/admin/.test(text), 'still points at the public site');
+});
+
+await t('phone notifications can be turned on, show a private topic, and turned off', async () => {
+  let me = await (await A('/me')).json();
+  assert(me.ntfy && !me.ntfy.topic, 'should start switched off');
+  const r = await A('/ntfy/setup', { method: 'POST' });
+  const d = await r.json();
+  assert(/^a3d-[a-z0-9]{18}$/.test(d.topic), 'topic is not long and random: ' + d.topic);
+  me = await (await A('/me')).json();
+  assert(me.ntfy.topic === d.topic, 'topic was not saved');
+  const again = await (await A('/ntfy/setup', { method: 'POST' })).json();
+  assert(again.topic === d.topic, 'setup twice should keep the same topic');
+  await A('/ntfy/off', { method: 'POST' });
+  me = await (await A('/me')).json();
+  assert(!me.ntfy.topic, 'turning off did not clear the topic');
+});
+
+await t('the new order push names the order and links straight to it', async () => {
+  const m = newOrderPush({ id: 12, ref: 'A3D-0012', mode: 'print', material: 'PLA', quantity: '25', colour: 'black' },
+    { name: 'Jose', company: 'SVB' }, [{}]);
+  assert(m.title === 'New order A3D-0012', 'title: ' + m.title);
+  assert(m.message.includes('Jose (SVB)') && m.message.includes('25x PLA black') && m.message.includes('1 file'), 'message: ' + m.message);
+  assert(m.click === 'https://app.a3dprinting.com/admin#/order/12', 'link: ' + m.click);
+});
+
+await t('the settings screen has the phone notifications box', async () => {
+  assert(ADMIN_HTML.includes('Phone notifications') && ADMIN_HTML.includes('ntfySetup()') && ADMIN_HTML.includes('ntfyTest()'), 'box or buttons missing');
 });
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

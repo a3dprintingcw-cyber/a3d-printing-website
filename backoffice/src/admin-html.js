@@ -969,6 +969,25 @@ function settings() {
     var redirect = location.origin + '/api/admin/gmail/callback';
     var html = '<h1>Settings</h1><p class="sub">Connections the back office uses to do its job.</p>' + flash;
 
+    var nt = (me.ntfy || {}).topic;
+    html += '<div class="card"><h2>Phone notifications</h2>';
+    if (nt) {
+      html += '<p>On. Every new order pings your phone straight away.</p>' +
+        '<ol class="steps">' +
+        '<li>Install the free <b>ntfy</b> app (<a href="https://apps.apple.com/app/ntfy/id1625396347" target="_blank" rel="noopener">iPhone</a> or <a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" target="_blank" rel="noopener">Android</a>) and allow notifications.</li>' +
+        '<li>Tap <b>+</b> and subscribe to this topic, exactly as written:<br><code class="copy" id="ntopic">' + esc(nt) + '</code> ' +
+        '<button class="ghost small" onclick="copyText(\'ntopic\')">Copy</button></li>' +
+        '<li>Press the test button. Your phone should buzz.</li>' +
+        '</ol>' +
+        '<p class="muted">Keep the topic private: anyone who knows it can read the alerts.</p>' +
+        '<p><button class="primary" onclick="ntfyTest()">Send a test notification</button> ' +
+        '<button class="ghost" onclick="ntfyOff()">Turn off</button></p>';
+    } else {
+      html += '<p class="muted">Off. Turn it on to get a phone notification for every new order, no email setup needed.</p>' +
+        '<p><button class="primary" onclick="ntfySetup()">Turn on phone notifications</button></p>';
+    }
+    html += '</div>';
+
     html += '<div class="card"><h2>Email</h2>';
     if (g.connected) {
       html += '<p>Connected. Quotes go out from <b>' + esc(g.account || me.email) + '</b> and land in that Sent folder.</p>' +
@@ -1109,6 +1128,19 @@ function gmailTest() {
   api('/gmail/test', { method: 'POST' })
     .then(function (r) { alert('Sent to ' + r.sentTo + '. Check your inbox.'); })
     .catch(function (e) { alert(e.message); });
+}
+
+function ntfySetup() {
+  api('/ntfy/setup', { method: 'POST' }).then(settings).catch(function (e) { alert(e.message); });
+}
+function ntfyTest() {
+  api('/ntfy/test', { method: 'POST' })
+    .then(function () { alert('Sent. Check your phone.'); })
+    .catch(function (e) { alert(e.message); });
+}
+function ntfyOff() {
+  if (!confirm('Turn off phone notifications? You can turn them back on any time, with a new topic.')) return;
+  api('/ntfy/off', { method: 'POST' }).then(settings).catch(showError);
 }
 
 function gmailDisconnect() {

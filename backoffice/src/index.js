@@ -1,5 +1,6 @@
 import { identify } from './access.js';
 import { alertAdmin, newOrderAlert } from './email.js';
+import { push, newOrderPush, ntfyTopic, createTopic, clearTopic } from './notify.js';
 import { createPayment, fetchStatus, isMock } from './sentoo.js';
 import { sendMail, quoteEmail, isConfigured as gmailReady, gmailConfig, exchangeCode, GMAIL_SCOPES } from './gmail.js';
 import { getSetting, setSetting } from './settings.js';
@@ -205,6 +206,7 @@ async function handleQuoteRequest(request, env, ctx) {
     .bind(order.id, 'status', 'Request received from the website').run();
 
   ctx.waitUntil(alertAdmin(env, `New request ${ref} from ${customer.name}`, newOrderAlert(order, customer, files)));
+  ctx.waitUntil(push(env, newOrderPush(order, customer, files)));
 
   return json({ ok: true, ref });
 }
@@ -377,6 +379,7 @@ export async function adminRoutes(request, env, url, email) {
     return json({
       email,
       sentoo: isMock(env) ? 'mock' : 'live',
+      ntfy: { topic: await ntfyTopic(env) },
       gmail: { connected: Boolean(g.clientId && g.clientSecret && g.refreshToken), hasApp: Boolean(g.clientId && g.clientSecret), account: g.account },
       qbo: {
         connected: Boolean(qc.clientId && qc.clientSecret && qc.refreshToken && qc.realmId),
@@ -386,6 +389,20 @@ export async function adminRoutes(request, env, url, email) {
         needsReconnect: qc.needsReconnect,
       },
     });
+  }
+
+  // --- phone notifications through ntfy -------------------------------
+  if (p === '/ntfy/setup' && method === 'POST') {
+    const topic = (await ntfyTopic(env)) || (await createTopic(env));
+    return json({ ok: true, topic });
+  }
+  if (p === '/ntfy/test' && method === 'POST') {
+    const ok = await push(env, { title: 'A3D back office', message: 'Phone notifications are working. New orders will show up here.', tags: 'white_check_mark', click: 'https://app.a3dprinting.com/admin' });
+    return ok ? json({ ok: true }) : bad('Could not send. Set up notifications first.', 502);
+  }
+  if (p === '/ntfy/off' && method === 'POST') {
+    await clearTopic(env);
+    return json({ ok: true });
   }
 
   // --- connecting Gmail, all of it from inside the back office ----------
