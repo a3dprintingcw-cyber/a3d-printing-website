@@ -73,4 +73,24 @@
   document.addEventListener("visibilitychange", function () { playVideos(!document.hidden); });
 
   show(location.hash, !!location.hash);
+
+  // Hero parallax: the photo drifts slower than the page, zooms in and fades,
+  // and the headline lifts away. Only transforms and opacity, so it stays smooth.
+  var hero = document.querySelector('.hero'), bg = document.querySelector('.hero-bg');
+  if (hero && bg && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    var ticking = false;
+    var paint = function () {
+      ticking = false;
+      if (hero.classList.contains('page-hidden')) return;
+      var h = hero.offsetHeight || 1;
+      var p = Math.max(0, Math.min(1, window.scrollY / h));
+      bg.style.setProperty('--hero-y', (p * h * 0.35).toFixed(1) + 'px');
+      bg.style.setProperty('--hero-s', (1.04 + p * 0.14).toFixed(3));
+      bg.style.setProperty('--hero-o', (1 - p * 0.85).toFixed(3));
+      hero.style.setProperty('--copy-y', (p * -60).toFixed(1) + 'px');
+      hero.style.setProperty('--copy-o', (1 - p * 0.9).toFixed(3));
+    };
+    window.addEventListener('scroll', function () { if (!ticking) { ticking = true; requestAnimationFrame(paint); } }, { passive: true });
+    paint();
+  }
 })();

@@ -457,8 +457,10 @@
     if (onQuotePage) {
       a.addEventListener("click", function (e) {
         e.preventDefault();
-        var section = document.getElementById("quote");
-        section.scrollIntoView({ behavior: "smooth", block: "start" });
+        // The quote form is its own section now: open it (js/pages.js), or if
+        // it is already open, scroll to it.
+        if (location.hash !== "#quote") location.hash = "#quote";
+        else document.getElementById("quote").scrollIntoView({ behavior: "smooth", block: "start" });
         // Put the cursor in the first field of whichever side is showing.
         var mode = body.getAttribute("data-mode") === "dev" ? "d" : "p";
         var first = document.getElementById(mode + "-name");
